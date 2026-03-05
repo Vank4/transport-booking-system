@@ -1,115 +1,104 @@
-📘 Transport Booking System – Documentation Hub
+# Transport Booking System - Documentation
 
-1️⃣ Mục đích của thư mục docs/
-Thư mục docs/ là nguồn sự thật (Single Source of Truth) cho toàn bộ hệ thống đặt vé máy bay & tàu hỏa.
-Tất cả thành viên bắt buộc phải bám theo tài liệu trong thư mục này khi:
-Thiết kế Database
-Viết Prisma schema
-Xây dựng API
-Thiết kế frontend
-Thực hiện merge code
-Mục tiêu chính:
-Ngăn chặn việc mỗi người code theo một cách khác nhau
-Giảm conflict khi merge
-Đảm bảo hệ thống đúng theo file đặc tả
+**Last Updated:** 2026-03-05
+**Framework:** arc42 (v8)
+**Stack:** Node.js 20 + Express 4 + MongoDB 7 | React 18 + Next.js (App Router)
 
-🧭 2️⃣ Cấu trúc tài liệu
-🔹 A. Nghiệp vụ hệ thống (Business Specification)
-File Mô tả
-00-overview.md Tổng quan hệ thống, mục tiêu, phạm vi
-01-roles-permissions.md Phân quyền User/Admin
-02-functional-modules.md Module chức năng theo đặc tả
-03-sitemap-pages.md Danh sách trang Client & Admin
+> This directory is the **single source of truth** for the entire system.
 
-🔹 B. Thiết kế kỹ thuật (System Design)
-File Mô tả
-10-architecture.md Kiến trúc FE – BE – DB
-11-realtime-seat-hold.md Thiết kế giữ ghế realtime
-12-payment-flow.md Flow thanh toán & trạng thái booking
+---
 
-🔹 C. Database (Prisma + Postgres)
-📁 20-database/
-File Mô tả
-erd.md ERD + quan hệ giữa các bảng
-data-dictionary.md Giải thích chi tiết từng bảng & field
-prisma-schema-guidelines.md Quy ước viết schema.prisma
-migrations.md Quy trình migrate & seed dữ liệu
-⚠️ Mọi thay đổi DB bắt buộc phải:
-Cập nhật docs
-Tạo migration
-Không được chỉnh sửa trực tiếp production schema
+## Quick Navigation
 
-🔹 D. API Contract (FE ↔ BE)
-📁 30-api/
-File Mô tả
-api-conventions.md Chuẩn response, error, pagination
-endpoints-auth.md API Auth
-endpoints-search-trips.md API tìm kiếm chuyến
-endpoints-seat.md API giữ ghế
-endpoints-booking.md API booking
-endpoints-voucher.md API voucher
-endpoints-admin.md API admin
-⚠️ FE không được gọi API chưa có trong docs.
-⚠️ BE không được thay đổi response structure khi chưa cập nhật docs.
+| Section | Description |
+|---|---|
+| [01 Introduction](./01-introduction/01-system-overview.md) | System overview, quality goals, stakeholders |
+| [02 Constraints](./02-constraints/01-technical-constraints.md) | Technical constraints |
+| [03 Context](./03-context/01-system-context.md) | System boundaries, roles, external dependencies |
+| [04 Solution Strategy](./04-solution-strategy/01-architecture-decisions.md) | Architecture principles |
+| [05 Building Blocks](./05-building-blocks/01-backend-components.md) | Backend + frontend components, modules |
+| [06 Runtime](./06-runtime/01-seat-hold-flow.md) | Seat hold + payment flows (Mermaid diagrams) |
+| [07 Deployment](./07-deployment/03-local-setup.md) | Infrastructure, env vars, local setup, production |
+| [08 Crosscutting](./08-crosscutting/01-api-conventions.md) | API conventions, errors, security, testing |
+| [09 Decisions](./09-decisions/ADR-0001-tech-stack.md) | Architecture Decision Records |
+| [10 API Reference](./10-api-reference/README.md) | Full endpoint documentation |
+| [11 Database](./11-database/01-data-model.md) | Data model, ERD, seed guide |
+| [12 Dev Guide](./12-dev-guide/01-folder-structure.md) | Folder structure, conventions, git workflow |
 
-🔹 E. Hướng dẫn phát triển
-📁 40-dev-guide/
-File Mô tả
-setup-local.md Cách chạy local
-env.md Cấu hình biến môi trường
-folder-structure.md Giải thích cấu trúc repo
-coding-conventions.md Quy chuẩn code
-git-workflow.md Quy trình branch/merge
+---
 
-🔹 F. Quyết định kỹ thuật (Architecture Decision Records)
-📁 90-decisions/
-Các file trong thư mục này ghi lại:
-Quyết định chọn Prisma + Postgres
-Quy tắc modeling Booking – Ticket – Seat
-Quy tắc giữ ghế (hold time, release rule)
-Mục đích:
-Tránh tranh luận lặp lại
-Ghi nhận lý do thay đổi kiến trúc
+## File Index
 
-👥 3️⃣ Phân quyền tài liệu trong team 5 người
-👑 Nhóm trưởng (Lead)
-Chịu trách nhiệm:
-Chuẩn hóa Prisma schema
-Kiểm soát API contract
-Kiểm soát git workflow
-Merge & review code
-Cập nhật decision logs
-Lead không cần code nhiều feature, nhưng phải giữ hệ thống ổn định và thống nhất.
-👨‍💻 4 Thành viên còn lại
-Mỗi người:
-Chịu trách nhiệm module của mình
-Viết docs API tương ứng
-Không thay đổi DB hoặc API structure khi chưa cập nhật docs
+### 01 Introduction
+- [01-system-overview.md](./01-introduction/01-system-overview.md)
+- [02-quality-goals.md](./01-introduction/02-quality-goals.md)
+- [03-stakeholders.md](./01-introduction/03-stakeholders.md)
 
-🚨 4️⃣ Quy tắc bắt buộc để tránh conflict
+### 02 Constraints
+- [01-technical-constraints.md](./02-constraints/01-technical-constraints.md)
 
-1. Không ai tự tạo bảng DB theo ý mình
-   Chỉ được chỉnh sửa trong schema.prisma đã được thống nhất.
+### 03 Context
+- [01-system-context.md](./03-context/01-system-context.md)
+- [02-roles-permissions.md](./03-context/02-roles-permissions.md)
 
-2. Không thay đổi API response structure khi chưa cập nhật docs
-3. Không push trực tiếp vào main
-   Workflow chuẩn:
-   feature/<module-name>
-   → pull request vào dev
-   → review
-   → merge 4. Mọi thay đổi quan trọng phải cập nhật docs trước khi merge
+### 04 Solution Strategy
+- [01-architecture-decisions.md](./04-solution-strategy/01-architecture-decisions.md)
 
-🔄 5️⃣ Quy trình làm việc chuẩn
-Xem docs trước khi code
-Nếu thiếu → cập nhật docs → thảo luận
-Code theo đúng schema & API contract
-Tạo PR
-Lead review & merge
+### 05 Building Blocks
+- [01-backend-components.md](./05-building-blocks/01-backend-components.md)
+- [02-frontend-components.md](./05-building-blocks/02-frontend-components.md)
+- [03-functional-modules.md](./05-building-blocks/03-functional-modules.md)
 
-🎯 6️⃣ Mục tiêu cuối cùng
-Thư mục docs/ không phải để “cho có”.
-Nó là:
-Bộ khung chuẩn hóa toàn hệ thống
-Công cụ giảm conflict
-Cách để team làm việc chuyên nghiệp
-Tài liệu bảo vệ đồ án nếu có chấm điểm
+### 06 Runtime
+- [01-seat-hold-flow.md](./06-runtime/01-seat-hold-flow.md)
+- [02-payment-flow.md](./06-runtime/02-payment-flow.md)
+
+### 07 Deployment
+- [01-infrastructure.md](./07-deployment/01-infrastructure.md)
+- [02-environment-variables.md](./07-deployment/02-environment-variables.md)
+- [03-local-setup.md](./07-deployment/03-local-setup.md)
+- [04-production-deployment.md](./07-deployment/04-production-deployment.md)
+
+### 08 Crosscutting Concepts
+- [01-api-conventions.md](./08-crosscutting/01-api-conventions.md)
+- [02-error-catalogue.md](./08-crosscutting/02-error-catalogue.md)
+- [03-security.md](./08-crosscutting/03-security.md)
+- [04-testing-strategy.md](./08-crosscutting/04-testing-strategy.md)
+
+### 09 Architecture Decisions
+- [ADR-0001-tech-stack.md](./09-decisions/ADR-0001-tech-stack.md) - Node.js + MongoDB (Accepted)
+- [ADR-0002-db-modeling.md](./09-decisions/ADR-0002-db-modeling.md) - Hybrid modeling (Accepted)
+- [ADR-0003-seat-hold-rules.md](./09-decisions/ADR-0003-seat-hold-rules.md) - Atomic hold, TTL job (Accepted)
+
+### 10 API Reference
+- [README.md](./10-api-reference/README.md) - Implementation status
+- [01-auth.md](./10-api-reference/01-auth.md)
+- [02-search.md](./10-api-reference/02-search.md)
+- [03-seats.md](./10-api-reference/03-seats.md)
+- [04-bookings.md](./10-api-reference/04-bookings.md)
+- [05-vouchers.md](./10-api-reference/05-vouchers.md)
+- [06-admin.md](./10-api-reference/06-admin.md)
+
+### 11 Database
+- [01-data-model.md](./11-database/01-data-model.md)
+- [02-erd.md](./11-database/02-erd.md)
+- [03-seed-guide.md](./11-database/03-seed-guide.md)
+
+### 12 Developer Guide
+- [01-folder-structure.md](./12-dev-guide/01-folder-structure.md)
+- [02-coding-conventions.md](./12-dev-guide/02-coding-conventions.md)
+- [03-git-workflow.md](./12-dev-guide/03-git-workflow.md)
+- [04-ui-pages.md](./12-dev-guide/04-ui-pages.md)
+
+---
+
+## Known Issues (Critical)
+
+| # | Issue | File | Priority |
+|---|---|---|---|
+| 1 | search.routes.js not mounted - search returns 404 | src/app.js | Critical |
+| 2 | routes/index.js calls app.listen(3000) - duplicate server | src/routes/index.js | Critical |
+| 3 | hold_expired_at stored as Number not Date | src/controllers/seat.controller.js | High |
+| 4 | getAllBookings returns all users data | src/controllers/booking.controller.js | High |
+| 5 | authMiddleware reads process.env.JWT_SECRET directly | src/middleware/authMiddleware.js | Medium |
+| 6 | No TTL expiry job - seat holds never auto-release | src/jobs/ (empty) | High |
