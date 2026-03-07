@@ -1,0 +1,6 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/auth/forgot-password/page": "/auth/forgot-password",
+  "/public/page": "/public"
+}

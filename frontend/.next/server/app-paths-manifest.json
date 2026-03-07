@@ -1,0 +1,6 @@
+{
+  "/_global-error/page": "app/_global-error/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/auth/forgot-password/page": "app/auth/forgot-password/page.js",
+  "/public/page": "app/public/page.js"
+}

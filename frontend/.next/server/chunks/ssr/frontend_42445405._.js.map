@@ -1,0 +1,1 @@
+{"version":3,"sources":["../../../../../frontend/src/app/public/page.tsx"],"sourcesContent":["export default function PublicPage() {\n  return <div>Public Page</div>;\n}\n"],"names":[],"mappings":"+LAAe,SAAS,IACtB,MAAO,CAAA,EAAA,EAAA,GAAA,EAAC,MAAA,UAAI,eACd"}
