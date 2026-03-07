@@ -30,7 +30,8 @@ exports.registerUser = async (req, res) => {
     await user.save();
     res.status(201).json({ message: "User registered successfully!" });
   } catch (err) {
-    res.status(500).json({ message: "Internal server error!", error: err });
+    console.error("[registerUser]", err);
+    res.status(500).json({ message: "Internal server error!" });
   }
 };
 
