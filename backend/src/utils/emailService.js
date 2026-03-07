@@ -6,15 +6,15 @@ const env = require("../config/env");
  * (Tránh lỗi khi module được load trước khi dotenv đọc xong)
  */
 const createTransporter = () =>
-  nodemailer.createTransport({
-    host: env.smtpHost,
-    port: env.smtpPort,
-    secure: env.smtpPort === 465,
-    auth: {
-      user: env.smtpUser,
-      pass: env.smtpPass,
-    },
-  });
+	nodemailer.createTransport({
+		host: env.smtpHost,
+		port: env.smtpPort,
+		secure: env.smtpPort === 465,
+		auth: {
+			user: env.smtpUser,
+			pass: env.smtpPass,
+		},
+	});
 
 /**
  * Gửi email chứa OTP reset mật khẩu.
@@ -23,21 +23,21 @@ const createTransporter = () =>
  * @returns {Promise<void>}
  */
 const sendPasswordResetEmail = async (to, otp) => {
-  const expiryMinutes = env.otpExpiryMinutes;
+	const expiryMinutes = env.otpExpiryMinutes;
 
-  // Dùng smtpUser làm địa chỉ gửi để khớp tài khoản xác thực SMTP
-  const fromAddress = env.emailFrom || env.smtpUser;
+	// Dùng smtpUser làm địa chỉ gửi để khớp tài khoản xác thực SMTP
+	const fromAddress = env.emailFrom || env.smtpUser;
 
-  const transporter = createTransporter();
+	const transporter = createTransporter();
 
-  const mailOptions = {
-    from: {
-      name: "Transport Booking",
-      address: fromAddress,
-    },
-    to,
-    subject: "Yêu cầu đặt lại mật khẩu",
-    html: `
+	const mailOptions = {
+		from: {
+			name: "Transport Booking",
+			address: fromAddress,
+		},
+		to,
+		subject: "Yêu cầu đặt lại mật khẩu",
+		html: `
       <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto;">
         <h2 style="color: #2563eb;">Đặt lại mật khẩu</h2>
         <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
@@ -51,9 +51,9 @@ const sendPasswordResetEmail = async (to, otp) => {
         </p>
       </div>
     `,
-  };
+	};
 
-  await transporter.sendMail(mailOptions);
+	await transporter.sendMail(mailOptions);
 };
 
 module.exports = { sendPasswordResetEmail };
