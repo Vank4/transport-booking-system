@@ -35,11 +35,11 @@ app.use("/api/seats", authMiddleware, seatRoutes); // Quản lý ghế
 
 // Xử lý route không tìm thấy (404)
 app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Not Found",
-    errors: { code: "NOT_FOUND" },
-  });
+	res.status(404).json({
+		success: false,
+		message: "Not Found",
+		errors: { code: "NOT_FOUND" },
+	});
 });
 
 // Xử lý lỗi chung cho toàn ứng dụng
