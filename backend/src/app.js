@@ -33,6 +33,9 @@ app.use("/api/search", searchRoutes);
 app.use("/api/bookings", authMiddleware, bookingRoutes); // Đặt vé, thanh toán
 app.use("/api/seats", authMiddleware, seatRoutes); // Quản lý ghế
 
+const passengerRoutes = require("./routes/passenger.routes");
+app.use("/api/passengers", passengerRoutes); // Luồng thông tin hành khách (Lưu Draft)
+
 // Xử lý route không tìm thấy (404)
 app.use((req, res) => {
 	res.status(404).json({
