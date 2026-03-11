@@ -1,8 +1,87 @@
 # 03 — Seat Endpoints
 
-**Last Updated:** 2026-03-05  
+**Last Updated:** 2026-03-10
 **Status:** Active (Known Bug — see below)  
 **Section:** arc42 Chapter 10 — API Reference
+
+---
+
+## GET /api/seats/map/:tripId
+
+Retrieve the full seat map for a specific flight or train trip.
+
+**Auth required:** No
+
+**Path parameters:**
+
+| Field | Type | Required | Constraint |
+|---|---|---|---|
+| `tripId` | string | Yes | ObjectId of the trip (flight or train) |
+
+**Response 200 (Flight Example):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "tripType": "flight",
+    "tripId": "64a1b2c3d4e5f6a7b8c9d0e3",
+    "trip": {
+      "flightNumber": "VN-123",
+      "departureTime": "2026-04-15T08:00:00.000Z",
+      "arrivalTime": "2026-04-15T10:00:00.000Z",
+      "status": "SCHEDULED"
+    },
+    "seats": [
+      {
+        "_id": "64a1b2c3d4e5f6a7b8c9d0e1",
+        "seat_number": "1A",
+        "class": "BUSINESS",
+        "status": "AVAILABLE",
+        "holdUntil": null,
+        "price_modifier": 500000
+      }
+    ]
+  }
+}
+```
+
+**Response 200 (Train Example):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "tripType": "train",
+    "tripId": "64a1b2c3d4e5f6a7b8c9d0e4",
+    "trip": {
+      "departureTime": "2026-04-15T08:00:00.000Z",
+      "arrivalTime": "2026-04-15T20:00:00.000Z",
+      "status": "SCHEDULED"
+    },
+    "carriages": [
+      {
+        "carriageId": "64a1b2c3d4e5f6a7b8c9d0e5",
+        "carriageNumber": "1",
+        "type": "SEAT",
+        "basePrice": 300000,
+        "seats": [
+           {
+             "_id": "64a1b2c3d4e5f6a7b8c9d0e6",
+             "seat_number": "1",
+             "class": "ECONOMY",
+             "status": "BOOKED",
+             "holdUntil": null,
+             "price_modifier": 0
+           }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Error responses:** `404 Trip not found.`, `400 A valid tripId is required.`
 
 ---
 

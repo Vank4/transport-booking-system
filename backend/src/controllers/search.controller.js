@@ -1,51 +1,78 @@
-const Flight = require("../models/flights.model");
-const Ticket = require("../models/tickets.model");
+const searchService = require('../services/search.service');
 
-// Tìm kiếm chuyến bay
-exports.searchFlights = async (req, res) => {
-  const { departure_airport_id, arrival_airport_id, date } = req.query;
-
+const searchFlights = async (req, res, next) => {
   try {
-    const flights = await Flight.find({
-      departure_airport_id,
-      arrival_airport_id,
-      departure_time: { $gte: new Date(date) }, // Tìm chuyến bay khởi hành sau ngày chỉ định
+    const { origin, destination, departure_date, passengers, sort, page, limit } = req.query;
+
+    const result = await searchService.findFlights({
+      origin,
+      destination,
+      departureDate: departure_date,
+      passengers,
+      sort,
+      page,
+      limit
     });
 
-    if (flights.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No flights found for your search criteria" });
+    if (!result.trips || result.trips.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        code: 'NO_TRIPS_FOUND',
+        message: 'No flights found matching your search criteria.'
+      });
     }
 
-    res.status(200).json({ flights });
+    res.status(200).json({
+      status: 'success',
+      data: result.trips,
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit
+      }
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Error searching for flights", error: err });
+    next(err);
   }
 };
 
-// Tìm kiếm vé
-exports.searchTickets = async (req, res) => {
-  const { booking_code, passenger_name } = req.query;
 
+
+const searchTrainTrips = async (req, res, next) => {
   try {
-    const tickets = await Ticket.find({
-      booking_code,
-      passenger_name: { $regex: passenger_name, $options: "i" }, // Tìm theo tên hành khách
+    const { origin, destination, departure_date, passengers, sort, page, limit } = req.query;
+
+    const result = await searchService.findTrainTrips({
+      origin,
+      destination,
+      departureDate: departure_date,
+      passengers,
+      sort,
+      page,
+      limit
     });
 
-    if (tickets.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No tickets found for your search criteria" });
+    if (!result.trips || result.trips.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        code: 'NO_TRIPS_FOUND',
+        message: 'Không tìm thấy chuyến tàu nào phù hợp.'
+      });
     }
 
-    res.status(200).json({ tickets });
+    res.status(200).json({
+      status: 'success',
+      data: result.trips,
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit
+      }
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Error searching for tickets", error: err });
+    next(err);
   }
 };
+
+// Update export ở cuối file
+module.exports = { searchFlights, searchTrainTrips };
