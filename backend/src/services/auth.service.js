@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/users.model");
 const PasswordResetToken = require("../models/passwordResetToken.model");
-const { sendPasswordResetEmail } = require("../utils/emailService");
+const { sendPasswordResetEmail } = require("../utils/email.service");
 const env = require("../config/env");
 
 // ─── Custom error class for domain errors ─────────────────────────────────────
