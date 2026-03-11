@@ -1,25 +1,66 @@
 const Booking = require("../models/bookings.model");
 const Payment = require("../models/payments.model");
+const Seat = require("../models/seats.model");
+const Ticket = require("../models/tickets.model");
 
 // Tạo booking mới
 exports.createBooking = async (req, res) => {
   try {
-    const { booking_code, booking_type, total_amount, status } = req.body;
+    const { trip_id, booking_type, seats, passengers } = req.body;
+    const user_id = req.user && req.user.userId ? req.user.userId : null; // Lấy ID nếu có, không có thì xài null (Khách Vãng Lai)
 
-    const booking = new Booking({
-      user_id: req.user.id, // lấy từ token, không lấy từ client
-      booking_code,
-      booking_type,
-      total_amount,
-      status: status || "PENDING",
-      created_at: new Date(),
+    // 1. Kiểm tra trạng thái hàng ghế (KAn-203)
+    const seatDocs = await Seat.find({ _id: { $in: seats } });
+    if (seatDocs.length !== seats.length) {
+      return res.status(400).json({ message: 'Một hoặc nhiều mã ghế không tồn tại.' });
+    }
+
+    let total_amount = 0;
+
+    for (let seat of seatDocs) {
+      if (seat.status === 'BOOKED' || seat.status === 'HELD') {
+        return res.status(400).json({ message: `Ghế ${seat.seat_number} đã có người đặt hoặc đang giữ.` });
+      }
+      // 2. Tính tiền tự động ở backend (Giả lập vé gốc 500k + phụ phí ghế)
+      let seatPrice = 500000 + (seat.price_modifier || 0);
+      total_amount += seatPrice;
+    }
+
+    // 3. Tạo Booking thông minh
+    const newBooking = new Booking({
+      user_id: user_id,
+      booking_code: "BKG" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000),
+      booking_type: booking_type,
+      trip_id: trip_id,
+      total_amount: total_amount,
+      status: 'WAITING_PAYMENT',
+      expires_at: new Date(Date.now() + 15 * 60 * 1000) // Hết hạn 15p
     });
 
-    await booking.save();
+    await newBooking.save();
+
+    // 4. Tạo luôn dàn Vé máy bay / Vé tàu vào database Ticket
+    const ticketPromises = passengers.map(async (p) => {
+      return Ticket.create({
+        booking_id: newBooking._id,
+        seat_id: p.seat_id,
+        passenger_name: p.passenger_name,
+        passenger_id_card: p.passenger_id_card,
+        final_price: 500000 // Tạm tính giống ở trên vòng lặp
+      });
+    });
+
+    await Promise.all(ticketPromises);
+
+    // 5. Cập nhật khóa ghế ngăn người khác mua trùng
+    await Seat.updateMany(
+      { _id: { $in: seats } },
+      { $set: { status: 'HELD', held_by_booking_id: newBooking._id } }
+    );
 
     res.status(201).json({
-      message: "Booking created successfully!",
-      booking,
+      message: "Booking created successfully, pending for payment",
+      booking: newBooking
     });
   } catch (err) {
     console.error(err);
