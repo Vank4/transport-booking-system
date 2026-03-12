@@ -30,4 +30,7 @@ router.post("/payment", bookingController.processPayment);
 // Lấy danh sách các đặt vé
 router.get("/list", bookingController.getAllBookings);
 
+// Tạo API Đường hầm Gửi Mã Giảm Giá (Cho phép Vãng lai xài luôn nhờ optionalAuth)
+router.post("/apply-voucher", optionalAuth, bookingController.applyVoucher);
+
 module.exports = router;
