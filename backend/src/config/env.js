@@ -23,6 +23,12 @@ const env = {
 
 	// OTP config
 	otpExpiryMinutes: Number(process.env.OTP_EXPIRY_MINUTES || 15),
+
+	// VNPAY
+	vnpTmnCode: process.env.VNP_TMN_CODE || "",
+	vnpHashSecret: process.env.VNP_HASH_SECRET || "",
+	vnpUrl: process.env.VNP_URL || "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
+	vnpReturnUrl: process.env.VNP_RETURN_URL || "http://localhost:5173/payment-success",
 };
 
 module.exports = env;

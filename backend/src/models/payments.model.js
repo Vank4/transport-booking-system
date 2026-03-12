@@ -8,7 +8,7 @@ const paymentSchema = new mongoose.Schema({
   },
   method: {
     type: String,
-    enum: ["VNPAY", "MOMO", "ZALOPAY", "MOCK"], // Bỏ PAYPAL theo yêu cầu
+    enum: ["VNPAY", "MOMO", "PAYPAL", "MOCK"],
     required: true,
   },
   transaction_id: {
