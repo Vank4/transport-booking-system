@@ -1,162 +1,198 @@
 const Flight = require('../models/flights.model');
 const Airport = require('../models/airports.model');
 const Airline = require('../models/airlines.model');
-const Seat = require('../models/seats.model'); // Import Seat để đếm số ghế trống
-
-
+const Seat = require('../models/seats.model');
 const TrainTrip = require('../models/trainTrips.model');
 const TrainStation = require('../models/trainStations.model');
 const Train = require('../models/trains.model');
+const TrainCarriage = require('../models/trainCarriages.model'); // QUAN TRỌNG: Cần import để lọc giá tàu
 
-const findFlights = async ({ origin, destination, departureDate, passengers = 1, sort, page = 1, limit = 20 }) => {
-  // 1. Kiểm tra đầu vào hợp lệ
+/**
+ * TÌM KIẾM CHUYẾN BAY
+ */
+const findFlights = async ({ origin, destination, departureDate, passengers = 1, sort, page = 1, limit = 20, filters = {} }) => {
+  // 1. Kiểm tra đầu vào
   if (!origin || !destination || !departureDate) {
     const error = new Error('Missing required search parameters');
     error.status = 400;
-    error.code = 'VALIDATION_ERROR';
     throw error;
   }
 
-  // 2. BẮT LỖI: Điểm đi và điểm đến trùng nhau
   if (origin.toUpperCase() === destination.toUpperCase()) {
-    const error = new Error('Origin and destination cannot be the same');
+    const error = new Error('Điểm đi và điểm đến không được trùng nhau');
     error.status = 400;
-    error.code = 'VALIDATION_ERROR';
     throw error;
   }
 
-  const passengerCount = parseInt(passengers, 10);
-  if (isNaN(passengerCount) || passengerCount < 1) {
-    const error = new Error('Passengers must be a valid number greater than 0');
-    error.status = 400;
-    error.code = 'VALIDATION_ERROR';
-    throw error;
-  }
+  const passengerCount = parseInt(passengers, 10) || 1;
 
-  // 3. Tìm Sân bay
+  // 2. Tìm Sân bay
   const [originAirport, destAirport] = await Promise.all([
     Airport.findOne({ iata_code: origin.toUpperCase() }),
     Airport.findOne({ iata_code: destination.toUpperCase() })
   ]);
 
-  if (!originAirport || !destAirport) {
-    return { trips: [], total: 0, page, limit };
-  }
+  if (!originAirport || !destAirport) return { trips: [], total: 0, page, limit };
 
-  // 4. Khoảng thời gian trong ngày
-  const startOfDay = new Date(departureDate);
-  startOfDay.setUTCHours(0, 0, 0, 0);
-  
-  const endOfDay = new Date(departureDate);
-  endOfDay.setUTCHours(23, 59, 59, 999);
-
-  // 5. Cấu hình Sắp xếp (Sorting)
-  let sortCriteria = { departure_time: 1 }; // Mặc định: Giờ khởi hành sớm nhất
-  if (sort === 'price:asc') {
-    sortCriteria = { 'prices.economy': 1 }; // Giá vé thấp nhất
-  } else if (sort === 'price:desc') {
-    sortCriteria = { 'prices.economy': -1 }; // Giá vé cao nhất
-  }
-
-  // 6. Truy vấn danh sách chuyến bay
-  const flights = await Flight.find({
+  // 3. Xây dựng Query cho Mongoose
+  const query = {
     departure_airport_id: originAirport._id,
     arrival_airport_id: destAirport._id,
-    departure_time: { $gte: startOfDay, $lte: endOfDay },
-    status: 'SCHEDULED' 
-  })
-  .populate('airline_id', 'name iata_code logo_url')
-  .populate('departure_airport_id', 'name iata_code city country') 
-  .populate('arrival_airport_id', 'name iata_code city country')   
-  .sort(sortCriteria) 
-  .lean(); 
+    status: 'SCHEDULED'
+  };
+
+  // --- LỌC THEO NGÀY VÀ GIỜ (time_from, time_to) ---
+  const startOfDay = new Date(departureDate);
+  const endOfDay = new Date(departureDate);
   
-  // 7. LỌC SỐ HÀNH KHÁCH: Chỉ giữ lại chuyến có đủ ghế trống
+  if (filters.time_from) {
+    const [h, m] = filters.time_from.split(':');
+    startOfDay.setUTCHours(parseInt(h), parseInt(m), 0, 0);
+  } else {
+    startOfDay.setUTCHours(0, 0, 0, 0);
+  }
+
+  if (filters.time_to) {
+    const [h, m] = filters.time_to.split(':');
+    endOfDay.setUTCHours(parseInt(h), parseInt(m), 59, 999);
+  } else {
+    endOfDay.setUTCHours(23, 59, 59, 999);
+  }
+  query.departure_time = { $gte: startOfDay, $lte: endOfDay };
+
+  // --- LỌC THEO GIÁ (Fix lỗi bạn gặp phải) ---
+  const seatClass = filters.seat_class ? filters.seat_class.toLowerCase() : 'economy';
+  const priceField = `prices.${seatClass}`;
+
+  if (filters.min_price || filters.max_price) {
+    query[priceField] = {};
+    if (filters.min_price) query[priceField].$gte = Number(filters.min_price);
+    if (filters.max_price) query[priceField].$lte = Number(filters.max_price);
+  }
+
+  // --- LỌC THEO HÃNG BAY ---
+  if (filters.airlines) {
+    const airlineCodes = filters.airlines.split(',');
+    const matchingAirlines = await Airline.find({ iata_code: { $in: airlineCodes } });
+    query.airline_id = { $in: matchingAirlines.map(a => a._id) };
+  }
+
+  // 4. Sắp xếp
+  let sortCriteria = { departure_time: 1 };
+  if (sort === 'price:asc') sortCriteria = { [priceField]: 1 };
+  if (sort === 'price:desc') sortCriteria = { [priceField]: -1 };
+
+  // 5. Thực thi Query
+  const flights = await Flight.find(query)
+    .populate('airline_id', 'name iata_code logo_url')
+    .populate('departure_airport_id', 'name iata_code city country')
+    .populate('arrival_airport_id', 'name iata_code city country')
+    .sort(sortCriteria)
+    .lean();
+
+  // 6. Lọc số hành khách (JS-side) và gắn thêm dữ liệu hiển thị
   const validFlights = [];
   for (const flight of flights) {
     const availableSeats = await Seat.countDocuments({
       flight_id: flight._id,
-      status: 'AVAILABLE'
+      status: 'AVAILABLE',
+      class: seatClass.toUpperCase()
     });
 
     if (availableSeats >= passengerCount) {
       validFlights.push({
         ...flight,
-        available_seats_count: availableSeats // Kèm theo số ghế trống để UI dùng
+        available_seats_count: availableSeats,
+        current_price: flight.prices[seatClass] // Trả về giá của hạng ghế đang tìm để dễ kiểm tra
       });
     }
   }
 
-  // 8. Cấu hình Phân trang (Pagination)
   const pageNum = parseInt(page, 10);
   const limitNum = parseInt(limit, 10);
-  const skip = (pageNum - 1) * limitNum;
-  const paginatedFlights = validFlights.slice(skip, skip + limitNum);
-
   return {
-    trips: paginatedFlights,
+    trips: validFlights.slice((pageNum - 1) * limitNum, pageNum * limitNum),
     total: validFlights.length,
     page: pageNum,
     limit: limitNum
   };
 };
 
+/**
+ * TÌM KIẾM CHUYẾN TÀU
+ */
+const findTrainTrips = async ({ origin, destination, departureDate, passengers = 1, sort, page = 1, limit = 20, filters = {} }) => {
+  if (!origin || !destination || !departureDate) throw new Error('Missing parameters');
 
-const findTrainTrips = async ({ origin, destination, departureDate, passengers = 1, sort, page = 1, limit = 20 }) => {
-  // 1. Kiểm tra thiếu tham số
-  if (!origin || !destination || !departureDate) {
-    const error = new Error('Missing search parameters');
-    error.status = 400;
-    error.code = 'VALIDATION_ERROR';
-    throw error;
-  }
-
-  // 2.  Kiểm tra ga trùng nhau 
-  if (origin.trim().toUpperCase() === destination.trim().toUpperCase()) {
-    const error = new Error('Ga đi và ga đến không được trùng nhau.');
-    error.status = 400;
-    error.code = 'VALIDATION_ERROR';
-    throw error;
-  }
-
-  // 3. Validate ngày không hợp lệ
-  const searchDate = new Date(departureDate);
-  if (isNaN(searchDate.getTime())) {
-    const error = new Error('Ngày khởi hành không hợp lệ');
-    error.status = 400;
-    error.code = 'INVALID_DATE';
-    throw error;
-  }
-
-  // 4. Tìm Ga đi và Ga đến trong DB
   const [originStation, destStation] = await Promise.all([
-    TrainStation.findOne({ name: origin }), 
+    TrainStation.findOne({ name: origin }),
     TrainStation.findOne({ name: destination })
   ]);
 
-  // Nếu không tìm thấy ga thì mới trả về mảng rỗng (404 ở Controller)
   if (!originStation || !destStation) return { trips: [], total: 0, page, limit };
 
-  const startOfDay = new Date(searchDate).setUTCHours(0,0,0,0);
-  const endOfDay = new Date(searchDate).setUTCHours(23,59,59,999);
+  // 1. LỌC GIÁ QUA BẢNG CARRIAGE TRƯỚC (Vì giá nằm ở đây)
+  let validTripIds = null;
+  const carriageQuery = {};
+  
+  if (filters.seat_class) carriageQuery.type = filters.seat_class.toUpperCase();
+  if (filters.min_price || filters.max_price) {
+    carriageQuery.base_price = {};
+    if (filters.min_price) carriageQuery.base_price.$gte = Number(filters.min_price);
+    if (filters.max_price) carriageQuery.base_price.$lte = Number(filters.max_price);
+  }
 
-  // 5. Truy vấn chuyến tàu
-  const trainTrips = await TrainTrip.find({
+  if (Object.keys(carriageQuery).length > 0) {
+    const carriages = await TrainCarriage.find(carriageQuery).select('train_trip_id');
+    validTripIds = carriages.map(c => c.train_trip_id);
+    if (validTripIds.length === 0) return { trips: [], total: 0, page, limit };
+  }
+
+  // 2. XÂY DỰNG QUERY CHUYẾN TÀU
+  const query = {
     departure_station_id: originStation._id,
     arrival_station_id: destStation._id,
-    departure_time: { $gte: startOfDay, $lte: endOfDay }
-  })
-  .populate('train_id', 'train_number name')
-  .populate('departure_station_id', 'name city')
-  .populate('arrival_station_id', 'name city')
-  .lean();
+    status: 'SCHEDULED'
+  };
+  if (validTripIds) query._id = { $in: validTripIds };
+
+  const searchDate = new Date(departureDate);
+  const start = new Date(searchDate).setUTCHours(0,0,0,0);
+  const end = new Date(searchDate).setUTCHours(23,59,59,999);
+  query.departure_time = { $gte: start, $lte: end };
+
+  // 3. Thực thi
+  const trips = await TrainTrip.find(query)
+    .populate('train_id', 'train_number name')
+    .populate('departure_station_id', 'name city')
+    .populate('arrival_station_id', 'name city')
+    .lean();
+
+// Gắn giá thấp nhất theo ĐÚNG HẠNG GHẾ để Frontend hiển thị và Sort
+  for (const t of trips) {
+    const carriageCondition = { train_trip_id: t._id };
+    
+    // NẾU CÓ LỌC HẠNG GHẾ, CHỈ TÌM TOA CỦA HẠNG ĐÓ
+    if (filters.seat_class) {
+      carriageCondition.type = filters.seat_class.toUpperCase();
+    }
+
+    const carriages = await TrainCarriage.find(carriageCondition);
+    
+    // Nếu mảng carriages có data, lấy giá min. Nếu không, gán bằng 0
+    t.starting_price = carriages.length > 0 
+      ? Math.min(...carriages.map(c => c.base_price)) 
+      : 0;
+  }
 
   const pageNum = parseInt(page, 10);
   const limitNum = parseInt(limit, 10);
-  const paginatedTrips = trainTrips.slice((pageNum - 1) * limitNum, pageNum * limitNum);
-
-  return { trips: paginatedTrips, total: trainTrips.length, page: pageNum, limit: limitNum };
+  return { 
+    trips: trips.slice((pageNum - 1) * limitNum, pageNum * limitNum), 
+    total: trips.length, 
+    page: pageNum, 
+    limit: limitNum 
+  };
 };
-
 
 module.exports = { findFlights, findTrainTrips };

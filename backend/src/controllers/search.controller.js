@@ -2,7 +2,7 @@ const searchService = require('../services/search.service');
 
 const searchFlights = async (req, res, next) => {
   try {
-    const { origin, destination, departure_date, passengers, sort, page, limit } = req.query;
+    const { origin, destination, departure_date, passengers, sort, page, limit, ...filters } = req.query;
 
     const result = await searchService.findFlights({
       origin,
@@ -11,7 +11,8 @@ const searchFlights = async (req, res, next) => {
       passengers,
       sort,
       page,
-      limit
+      limit,
+      filters // <--- PHẢI TRUYỀN BIẾN NÀY XUỐNG SERVICE
     });
 
     if (!result.trips || result.trips.length === 0) {
@@ -36,11 +37,9 @@ const searchFlights = async (req, res, next) => {
   }
 };
 
-
-
 const searchTrainTrips = async (req, res, next) => {
   try {
-    const { origin, destination, departure_date, passengers, sort, page, limit } = req.query;
+    const { origin, destination, departure_date, passengers, sort, page, limit, ...filters } = req.query;
 
     const result = await searchService.findTrainTrips({
       origin,
@@ -49,7 +48,8 @@ const searchTrainTrips = async (req, res, next) => {
       passengers,
       sort,
       page,
-      limit
+      limit,
+      filters
     });
 
     if (!result.trips || result.trips.length === 0) {
@@ -74,5 +74,4 @@ const searchTrainTrips = async (req, res, next) => {
   }
 };
 
-// Update export ở cuối file
 module.exports = { searchFlights, searchTrainTrips };
