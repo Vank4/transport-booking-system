@@ -6,16 +6,27 @@ const paymentSchema = new mongoose.Schema({
     ref: "Booking",
     required: true,
   },
-  method: { type: String, required: true },
-  transaction_id: { type: String, required: true, unique: true },
+  method: {
+    type: String,
+    enum: ["VNPAY", "MOMO", "ZALOPAY", "MOCK"], // Bỏ PAYPAL theo yêu cầu
+    required: true,
+  },
+  transaction_id: {
+    type: String,
+    unique: true,
+    sparse: true // Cho phép null tạm thời khi VNPay chưa trả về mã giao dịch
+  },
   amount: { type: Number, required: true },
   status: {
     type: String,
-    enum: ["PENDING", "PAID", "FAILED", "REFUNDED"],
+    enum: ["PENDING", "SUCCESS", "FAILED"],
     default: "PENDING",
   },
+  gateway_response: {
+    type: Object, // KAN-224: Lưu vết toàn bộ dữ liệu VNPay/MoMo trả về để rà soát
+  },
   paid_at: { type: Date, required: false },
-});
+}, { timestamps: true });
 
 const Payment = mongoose.model("Payment", paymentSchema);
 module.exports = Payment;
