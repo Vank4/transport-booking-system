@@ -91,7 +91,7 @@ const searchTrainTrips = async (req, res, next) => {
 };
 
 // ==========================================
-// 2. XEM CHI TIẾT CHUYẾN ĐI (Tính năng mới)
+// 2. XEM CHI TIẾT CHUYẾN ĐI
 // ==========================================
 const getFlightById = async (req, res, next) => {
   try {

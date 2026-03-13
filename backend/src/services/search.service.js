@@ -5,7 +5,7 @@ const Seat = require('../models/seats.model');
 const TrainTrip = require('../models/trainTrips.model');
 const TrainStation = require('../models/trainStations.model');
 const Train = require('../models/trains.model');
-const TrainCarriage = require('../models/trainCarriages.model');
+const TrainCarriage = require('../models/trainCarriages.model'); // QUAN TRỌNG: Cần import để lọc giá tàu
 
 /**
  * TÌM KIẾM CHUYẾN BAY
@@ -43,7 +43,7 @@ const findFlights = async ({ origin, destination, departureDate, passengers = 1,
     status: 'SCHEDULED'
   };
 
-  // --- LỌC THEO NGÀY VÀ GIỜ ---
+  // --- LỌC THEO NGÀY VÀ GIỜ (time_from, time_to) ---
   const startOfDay = new Date(departureDate);
   const endOfDay = new Date(departureDate);
   
@@ -62,7 +62,7 @@ const findFlights = async ({ origin, destination, departureDate, passengers = 1,
   }
   query.departure_time = { $gte: startOfDay, $lte: endOfDay };
 
-  // --- LỌC THEO GIÁ ---
+  // --- LỌC THEO GIÁ (Fix lỗi bạn gặp phải) ---
   const seatClass = filters.seat_class ? filters.seat_class.toLowerCase() : 'economy';
   const priceField = `prices.${seatClass}`;
 
@@ -105,7 +105,7 @@ const findFlights = async ({ origin, destination, departureDate, passengers = 1,
       validFlights.push({
         ...flight,
         available_seats_count: availableSeats,
-        current_price: flight.prices[seatClass]
+        current_price: flight.prices[seatClass] // Trả về giá của hạng ghế đang tìm để dễ kiểm tra
       });
     }
   }
@@ -138,7 +138,7 @@ const findTrainTrips = async ({ origin, destination, departureDate, passengers =
 
   if (!originStation || !destStation) return { trips: [], total: 0, page, limit };
 
-  // 1. LỌC GIÁ QUA BẢNG CARRIAGE TRƯỚC
+  // 1. LỌC GIÁ QUA BẢNG CARRIAGE TRƯỚC (Vì giá nằm ở đây)
   let validTripIds = null;
   const carriageQuery = {};
   
@@ -179,12 +179,14 @@ const findTrainTrips = async ({ origin, destination, departureDate, passengers =
   for (const t of trips) {
     const carriageCondition = { train_trip_id: t._id };
     
+    // NẾU CÓ LỌC HẠNG GHẾ, CHỈ TÌM TOA CỦA HẠNG ĐÓ
     if (filters.seat_class) {
       carriageCondition.type = filters.seat_class.toUpperCase();
     }
 
     const carriages = await TrainCarriage.find(carriageCondition);
     
+    // Nếu mảng carriages có data, lấy giá min. Nếu không, gán bằng 0
     t.starting_price = carriages.length > 0 
       ? Math.min(...carriages.map(c => c.base_price)) 
       : 0;
