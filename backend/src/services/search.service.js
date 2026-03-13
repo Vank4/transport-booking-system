@@ -261,10 +261,50 @@ const getTrainTripDetails = async (tripId) => {
   return { ...trip, carriages_info: carriages };
 };
 
-// EXPORT TOÀN BỘ CÁC HÀM
+// ==========================================
+// KIỂM TRA TRẠNG THÁI GHẾ TRỐNG 
+// ==========================================
+
+const checkFlightAvailability = async (flightId, seatClass) => {
+  const query = { flight_id: flightId, status: 'AVAILABLE' };
+  if (seatClass) query.class = seatClass.toUpperCase();
+
+  const availableCount = await Seat.countDocuments(query);
+
+  let status = 'PLENTY'; // Còn ghế
+  if (availableCount === 0) status = 'SOLD_OUT'; // Hết ghế
+  else if (availableCount <= 5) status = 'FEW_LEFT'; // Sắp hết ghế (Quy ước <= 5 ghế)
+
+  return { available_count: availableCount, status };
+};
+
+const checkTrainAvailability = async (tripId, seatClass) => {
+  // Với tàu hỏa, phải tìm các toa tàu (carriage) của chuyến đó trước
+  const carriageQuery = { train_trip_id: tripId };
+  if (seatClass) carriageQuery.type = seatClass.toUpperCase();
+
+  const carriages = await TrainCarriage.find(carriageQuery).select('_id');
+  const carriageIds = carriages.map(c => c._id);
+
+  // Đếm các ghế trống thuộc các toa vừa tìm được
+  const availableCount = await Seat.countDocuments({
+    carriage_id: { $in: carriageIds },
+    status: 'AVAILABLE'
+  });
+
+  let status = 'PLENTY';
+  if (availableCount === 0) status = 'SOLD_OUT';
+  else if (availableCount <= 5) status = 'FEW_LEFT';
+
+  return { available_count: availableCount, status };
+};
+
+
 module.exports = { 
   findFlights, 
   findTrainTrips, 
   getFlightDetails, 
-  getTrainTripDetails 
+  getTrainTripDetails,
+  checkFlightAvailability,
+  checkTrainAvailability
 };

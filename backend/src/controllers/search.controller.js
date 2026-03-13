@@ -123,9 +123,46 @@ const getTrainTripById = async (req, res, next) => {
   }
 };
 
+// ==========================================
+// 3. KIỂM TRA TRẠNG THÁI GHẾ (KAN-92)
+// ==========================================
+const checkFlightSeats = async (req, res, next) => {
+  try {
+    const { seat_class } = req.query; // Có thể truyền thêm hạng ghế trên URL (?seat_class=economy)
+    const availability = await searchService.checkFlightAvailability(req.params.id, seat_class);
+    
+    res.status(200).json({
+      success: true,
+      data: availability,
+      message: "Flight seat availability status",
+      errors: null
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const checkTrainSeats = async (req, res, next) => {
+  try {
+    const { seat_class } = req.query;
+    const availability = await searchService.checkTrainAvailability(req.params.id, seat_class);
+    
+    res.status(200).json({
+      success: true,
+      data: availability,
+      message: "Train seat availability status",
+      errors: null
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = { 
   searchFlights, 
   searchTrainTrips, 
   getFlightById, 
-  getTrainTripById 
+  getTrainTripById,
+  checkFlightSeats,
+  checkTrainSeats 
 };

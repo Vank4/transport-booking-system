@@ -11,4 +11,7 @@ router.get('/train-trips/search', searchController.searchTrainTrips);
 router.get('/flights/:id', searchController.getFlightById);
 router.get('/train-trips/:id', searchController.getTrainTripById);
 
+// 3.Khách gọi vào đây để xem chuyến bay/tàu này CÒN GHẾ hay HẾT GHẾ
+router.get('/flights/:id/availability', searchController.checkFlightSeats);
+router.get('/train-trips/:id/availability', searchController.checkTrainSeats);
 module.exports = router;
