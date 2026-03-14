@@ -27,7 +27,7 @@ app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev")); // Logging
 // Routes: Public và Protected
 app.use("/api/auth", authRoutes); // Đăng ký, đăng nhập (public routes)
 app.use("/api/health", healthRoutes); // Kiểm tra tình trạng server
-app.use("/api/search", searchRoutes);
+app.use("/api", searchRoutes);
 
 // Các route yêu cầu xác thực người dùng (Protected Routes)
 app.use("/api/bookings", bookingRoutes); // Đặt vé, thanh toán (Cho phép cả vãng lai và user đăng nhập)
