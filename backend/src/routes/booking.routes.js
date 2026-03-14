@@ -24,8 +24,7 @@ const optionalAuth = (req, res, next) => {
 // Tạo đặt vé mới
 router.post("/create", optionalAuth, validateBookingData, bookingController.createBooking);
 
-// Xử lý thanh toán
-router.post("/payment", bookingController.processPayment);
+// Xử lý thanh toán đã chuyển sang payment.routes.js
 
 // Lấy danh sách các đặt vé
 router.get("/list", bookingController.getAllBookings);

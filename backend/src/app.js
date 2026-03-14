@@ -10,6 +10,7 @@ const authRoutes = require("./routes/auth.routes");
 const bookingRoutes = require("./routes/booking.routes");
 const seatRoutes = require("./routes/seat.routes");
 const searchRoutes = require("./routes/search.routes");
+const paymentRoutes = require("./routes/payment.routes");
 
 // Import các middleware
 const authMiddleware = require("./middleware/authMiddleware");
@@ -35,6 +36,7 @@ app.use("/api/seats", authMiddleware, seatRoutes); // Quản lý ghế
 
 const passengerRoutes = require("./routes/passenger.routes");
 app.use("/api/passengers", passengerRoutes); // Luồng thông tin hành khách (Lưu Draft)
+app.use("/api/payments", paymentRoutes); // API Điều hướng Thanh Toán Tách Rời
 
 // Xử lý route không tìm thấy (404)
 app.use((req, res) => {
