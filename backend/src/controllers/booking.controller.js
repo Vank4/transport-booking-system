@@ -3,15 +3,16 @@ const Payment = require("../models/payments.model");
 const Seat = require("../models/seats.model");
 const Ticket = require("../models/tickets.model");
 const Voucher = require("../models/vouchers.model");
+const FlightFare = require("../models/flightFares.model");
 
 
 // Tạo booking mới
 exports.createBooking = async (req, res) => {
   try {
     const { trip_id, booking_type, seats, passengers } = req.body;
-    const user_id = req.user && req.user.userId ? req.user.userId : null; // Lấy ID nếu có, không có thì xài null (Khách Vãng Lai)
+    const user_id = req.user && req.user.userId ? req.user.userId : null;
 
-    // 1. Kiểm tra trạng thái hàng ghế (KAn-203)
+    // 1. Kiểm tra trạng thái hàng ghế
     const seatDocs = await Seat.find({ _id: { $in: seats } });
     if (seatDocs.length !== seats.length) {
       return res.status(400).json({ message: 'Một hoặc nhiều mã ghế không tồn tại.' });
@@ -19,16 +20,45 @@ exports.createBooking = async (req, res) => {
 
     let total_amount = 0;
 
+    // Map để tra cứu giá từng ghế nhanh hơn (seat_id → effective_price)
+    const seatPriceMap = {};
+
     for (let seat of seatDocs) {
       if (seat.status === 'BOOKED' || seat.status === 'HELD') {
         return res.status(400).json({ message: `Ghế ${seat.seat_number} đã có người đặt hoặc đang giữ.` });
       }
-      // 2. Tính tiền tự động ở backend (Giả lập vé gốc 500k + phụ phí ghế)
-      let seatPrice = 500000 + (seat.price_modifier || 0);
+
+      // 2. Query bảng giá từ FlightFare theo chuyến bay + hạng ghế
+      // Chỉ áp dụng cho FLIGHT; TRAIN dùng base_price của TrainCarriage
+      let seatPrice;
+
+      if (booking_type === 'FLIGHT') {
+        const fare = await FlightFare.findOne({
+          flight_id: trip_id,
+          cabin_class: seat.class,
+          is_active: true,
+        });
+
+        if (!fare) {
+          return res.status(400).json({
+            message: `Không tìm thấy bảng giá cho hạng ${seat.class} trên chuyến bay này. Vui lòng liên hệ quản trị viên.`,
+          });
+        }
+
+        // Ưu tiên giá khuyến mãi, nếu không có thì dùng giá gốc
+        const effectivePrice = fare.promo_price != null ? fare.promo_price : fare.base_price;
+        seatPrice = effectivePrice + (seat.price_modifier || 0);
+      } else {
+        // TRAIN: giữ nguyên logic cũ (TrainCarriage.base_price được tính ngoài)
+        // Tạm giữ price_modifier của ghế tàu
+        seatPrice = seat.price_modifier || 0;
+      }
+
+      seatPriceMap[seat._id.toString()] = seatPrice;
       total_amount += seatPrice;
     }
 
-    // 3. Tạo Booking thông minh
+    // 3. Tạo Booking
     const newBooking = new Booking({
       user_id: user_id,
       booking_code: "BKG" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000),
@@ -36,25 +66,28 @@ exports.createBooking = async (req, res) => {
       trip_id: trip_id,
       total_amount: total_amount,
       status: 'WAITING_PAYMENT',
-      expires_at: new Date(Date.now() + 15 * 60 * 1000) // Hết hạn 15p
+      expires_at: new Date(Date.now() + 15 * 60 * 1000),
     });
 
     await newBooking.save();
 
-    // 4. Tạo luôn dàn Vé máy bay / Vé tàu vào database Ticket
+    // 4. Tạo Ticket với final_price đúng từ bảng giá FlightFare
     const ticketPromises = passengers.map(async (p) => {
+      const thisSeat = seatDocs.find(s => s._id.toString() === p.seat_id.toString());
+      const finalPrice = thisSeat ? seatPriceMap[thisSeat._id.toString()] : 0;
+
       return Ticket.create({
         booking_id: newBooking._id,
         seat_id: p.seat_id,
         passenger_name: p.passenger_name,
         passenger_id_card: p.passenger_id_card,
-        final_price: 500000 // Tạm tính giống ở trên vòng lặp
+        final_price: finalPrice,
       });
     });
 
     await Promise.all(ticketPromises);
 
-    // 5. Cập nhật khóa ghế ngăn người khác mua trùng
+    // 5. Khoá ghế để ngăn người khác đặt trùng
     await Seat.updateMany(
       { _id: { $in: seats } },
       { $set: { status: 'HELD', held_by_booking_id: newBooking._id } }
@@ -62,7 +95,7 @@ exports.createBooking = async (req, res) => {
 
     res.status(201).json({
       message: "Booking created successfully, pending for payment",
-      booking: newBooking
+      booking: newBooking,
     });
   } catch (err) {
     console.error(err);
