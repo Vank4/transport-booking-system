@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   password_hash: { type: String, required: true },
   role: { type: String, enum: ["USER", "ADMIN"], default: "USER" },
   status: { type: String, enum: ["ACTIVE", "BLOCKED"], default: "ACTIVE" },
+  avatar: { type: String, default: "/default-avatar.svg" },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now },
 });
