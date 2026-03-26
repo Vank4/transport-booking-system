@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import "./seat-map.css";
 import { getSocket, disconnectSocket } from "@/lib/socket";
+import { getAccessToken } from "@/lib/auth";
 import config from "@/config";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface Seat {
   _id: string;
   seat_number: string;
@@ -46,12 +47,10 @@ interface SeatMapData {
 
 type WsStatus = "connecting" | "connected" | "disconnected" | "reconnecting";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const API_BASE = config.apiBaseUrl;
 const SEAT_PRICE = config.defaultSeatPrice;
 const HOLD_DURATION_SECONDS = config.seatHoldDurationSeconds;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount);
 }
@@ -63,17 +62,17 @@ function formatTime(seconds: number) {
 }
 
 function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+  return getAccessToken();
 }
 
 function getSeatPrice(seat: Seat): number {
   return SEAT_PRICE + (seat.price_modifier ?? 0);
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function SeatMapPage() {
-  const [tripId, setTripId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const tripId = searchParams.get("tripId");
+
   const [seatMap, setSeatMap] = useState<SeatMapData | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -83,82 +82,104 @@ export default function SeatMapPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
 
-  // Countdown timer
   const [timeLeft, setTimeLeft] = useState(HOLD_DURATION_SECONDS);
   const [isCounting, setIsCounting] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Stable ref to selectedIds for use in callbacks without stale closure issues
   const selectedIdsRef = useRef(selectedIds);
-  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  const holdExpiredHandledRef = useRef(false);
 
-  // ── Read tripId from URL ──────────────────────────────────────────────────
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setTripId(params.get("tripId"));
-  }, []);
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
 
-  // ── Fetch seat map ────────────────────────────────────────────────────────
-  const fetchSeatMap = useCallback(async (id: string) => {
+  const fetchSeatMap = useCallback(async (id: string, signal?: AbortSignal) => {
     setIsLoading(true);
     setError(null);
+
     try {
-      const res = await fetch(`${API_BASE}/seats/map/${id}`);
+      const res = await fetch(`${API_BASE}/seats/map/${id}`, { signal });
       const json = await res.json();
-      if (!res.ok) { setError(json.message ?? "Failed to load seat map."); return; }
+
+      if (!res.ok) {
+        setError(json.message ?? "Không thể tải sơ đồ ghế.");
+        return;
+      }
+
       const data: SeatMapData = json.data;
       setSeatMap(data);
+
       const flatSeats: Seat[] =
         data.tripType === "flight"
           ? (data.seats ?? [])
           : (data.carriages ?? []).flatMap((c) => c.seats);
+
       setSeats(flatSeats);
-    } catch {
-      setError("Could not connect to server. Please try again.");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      setError("Không thể kết nối đến máy chủ. Vui lòng thử lại.");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (tripId) fetchSeatMap(tripId);
+    if (!tripId) {
+      setError("Thiếu tripId trên URL.");
+      setIsLoading(false);
+      setWsStatus("disconnected");
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchSeatMap(tripId, controller.signal);
+
+    return () => {
+      controller.abort();
+    };
   }, [tripId, fetchSeatMap]);
 
-  // ── Socket.io ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!tripId) return;
 
     const socket = getSocket();
 
-    // Apply a single seat update from the server to local state
     function applyUpdate(payload: SeatUpdatePayload) {
       setSeats((prev) =>
-        prev.map((s) =>
-          s._id === payload.seatId
-            ? { ...s, status: payload.status, holdUntil: payload.updatedAt }
-            : s
+        prev.map((seat) =>
+          seat._id === payload.seatId
+            ? { ...seat, status: payload.status, holdUntil: payload.updatedAt }
+            : seat
         )
       );
-      // If the seat we had selected was claimed by someone else, deselect it
+
       if (payload.status !== "AVAILABLE" && selectedIdsRef.current.has(payload.seatId)) {
         setSelectedIds((prev) => {
           const next = new Set(prev);
           next.delete(payload.seatId);
-          if (next.size === 0) { setIsCounting(false); setTimeLeft(HOLD_DURATION_SECONDS); }
+          if (next.size === 0) {
+            setIsCounting(false);
+            setTimeLeft(HOLD_DURATION_SECONDS);
+          }
           return next;
         });
       }
     }
 
-    socket.on("connect", () => setWsStatus("connected"));
-    socket.on("disconnect", () => setWsStatus("disconnected"));
-    socket.on("connect_error", () => setWsStatus("reconnecting"));
-    socket.on("reconnect_attempt", () => setWsStatus("reconnecting"));
-    // On successful reconnect: re-fetch to catch any missed events
-    socket.on("reconnect", () => {
+    const handleConnect = () => setWsStatus("connected");
+    const handleDisconnect = () => setWsStatus("disconnected");
+    const handleReconnecting = () => setWsStatus("reconnecting");
+    const handleReconnect = () => {
       setWsStatus("connected");
-      fetchSeatMap(tripId);
-    });
+      void fetchSeatMap(tripId);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleReconnecting);
+    socket.on("reconnect_attempt", handleReconnecting);
+    socket.on("reconnect", handleReconnect);
 
     socket.on("seat_held", applyUpdate);
     socket.on("seat_released", applyUpdate);
@@ -170,11 +191,11 @@ export default function SeatMapPage() {
 
     return () => {
       socket.emit("leave_trip", tripId);
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
-      socket.off("reconnect_attempt");
-      socket.off("reconnect");
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleReconnecting);
+      socket.off("reconnect_attempt", handleReconnecting);
+      socket.off("reconnect", handleReconnect);
       socket.off("seat_held", applyUpdate);
       socket.off("seat_released", applyUpdate);
       socket.off("seat_booked", applyUpdate);
@@ -183,95 +204,131 @@ export default function SeatMapPage() {
     };
   }, [tripId, fetchSeatMap]);
 
-  // ── Countdown timer ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (isCounting) {
-      intervalRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current!);
-            handleHoldExpired();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCounting]);
-
   const handleHoldExpired = useCallback(() => {
-    alert("Đã hết thời gian giữ ghế. Vui lòng chọn lại.");
     const ids = selectedIdsRef.current;
-    setSeats((prev) => prev.map((s) => ids.has(s._id) ? { ...s, status: "AVAILABLE" } : s));
-    // Release on backend — fire and forget
+    if (ids.size === 0) {
+      setIsCounting(false);
+      setTimeLeft(HOLD_DURATION_SECONDS);
+      return;
+    }
+
+    alert("Đã hết thời gian giữ ghế. Vui lòng chọn lại.");
+
+    setSeats((prev) =>
+      prev.map((seat) => (ids.has(seat._id) ? { ...seat, status: "AVAILABLE", holdUntil: null } : seat))
+    );
+
     const token = getAuthToken();
-    if (token && tripId && ids.size > 0) {
+    if (token && tripId) {
       fetch(`${API_BASE}/seats/release`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ seatIds: [...ids], tripId }),
       }).catch(() => {});
     }
+
     setSelectedIds(new Set());
     setIsCounting(false);
     setTimeLeft(HOLD_DURATION_SECONDS);
   }, [tripId]);
 
-  // ── Toggle seat selection ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isCounting) {
+      holdExpiredHandledRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    intervalRef.current = setInterval(() => {
+      setTimeLeft((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isCounting]);
+
+  useEffect(() => {
+    if (!isCounting || timeLeft > 0 || holdExpiredHandledRef.current) return;
+    holdExpiredHandledRef.current = true;
+    handleHoldExpired();
+  }, [isCounting, timeLeft, handleHoldExpired]);
+
   const toggleSeat = useCallback((seat: Seat) => {
     if (seat.status === "BOOKED" || seat.status === "HELD") return;
+
     setSelectedIds((prev) => {
       const next = new Set(prev);
+
       if (next.has(seat._id)) {
         next.delete(seat._id);
       } else {
         next.add(seat._id);
       }
-      if (next.size > 0 && !isCounting) {
+
+      if (next.size > 0) {
         setIsCounting(true);
-        setTimeLeft(HOLD_DURATION_SECONDS);
-      } else if (next.size === 0) {
+        if (prev.size === 0) {
+          setTimeLeft(HOLD_DURATION_SECONDS);
+        }
+      } else {
         setIsCounting(false);
         setTimeLeft(HOLD_DURATION_SECONDS);
       }
+
       return next;
     });
-  }, [isCounting]);
+  }, []);
 
-  // ── Continue → POST /seats/select ─────────────────────────────────────────
   const handleContinue = async () => {
     if (selectedIds.size === 0 || !tripId) return;
+
     setIsProcessing(true);
     setApiError(null);
+
     const token = getAuthToken();
     if (!token) {
       setApiError("Bạn cần đăng nhập để đặt ghế.");
       setIsProcessing(false);
       return;
     }
+
     try {
       const res = await fetch(`${API_BASE}/seats/select`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ tripId, seatIds: [...selectedIds] }),
       });
+
       const json = await res.json();
       if (!res.ok) {
         setApiError(json.message ?? "Đặt ghế thất bại. Vui lòng thử lại.");
         return;
       }
+
       const confirmed: Seat[] = json.data?.selectedSeats ?? [];
       setSeats((prev) =>
-        prev.map((s) => {
-          const u = confirmed.find((c) => c._id === s._id);
-          return u ? { ...u } : s;
+        prev.map((seat) => {
+          const updated = confirmed.find((item) => item._id === seat._id);
+          return updated ? { ...updated } : seat;
         })
       );
-      alert(`Giữ ghế thành công!\nCác ghế: ${confirmed.map((s) => s.seat_number).join(", ")}\nChuyển sang trang nhập thông tin hành khách...`);
+
+      alert(
+        `Giữ ghế thành công!\nCác ghế: ${confirmed.map((seat) => seat.seat_number).join(", ")}\nChuyển sang trang nhập thông tin hành khách...`
+      );
     } catch {
       setApiError("Không thể kết nối đến máy chủ. Vui lòng thử lại.");
     } finally {
@@ -279,15 +336,14 @@ export default function SeatMapPage() {
     }
   };
 
-  // ── Computed ──────────────────────────────────────────────────────────────
-  const selectedSeats = seats.filter((s) => selectedIds.has(s._id));
-  const totalPrice = selectedSeats.reduce((sum, s) => sum + getSeatPrice(s), 0);
+  const selectedSeats = seats.filter((seat) => selectedIds.has(seat._id));
+  const totalPrice = selectedSeats.reduce((sum, seat) => sum + getSeatPrice(seat), 0);
 
   const seatRows = new Map<string, Seat[]>();
-  seats.forEach((s) => {
-    const row = s.seat_number.replace(/[A-Z]/g, "");
+  seats.forEach((seat) => {
+    const row = seat.seat_number.replace(/[A-Z]/g, "");
     if (!seatRows.has(row)) seatRows.set(row, []);
-    seatRows.get(row)!.push(s);
+    seatRows.get(row)!.push(seat);
   });
 
   const getSeatClass = (seat: Seat) => {
@@ -295,16 +351,28 @@ export default function SeatMapPage() {
     return `status-${seat.status.toLowerCase()}`;
   };
 
-  // WS status badge styling
   const wsBadgeStyle: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", gap: "0.35rem",
-    fontSize: "0.75rem", padding: "0.2rem 0.6rem", borderRadius: "999px",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.35rem",
+    fontSize: "0.75rem",
+    padding: "0.2rem 0.6rem",
+    borderRadius: "999px",
     fontWeight: 500,
-    background: wsStatus === "connected" ? "#dcfce7" : wsStatus === "connecting" ? "#fef9c3" : "#fee2e2",
-    color: wsStatus === "connected" ? "#166534" : wsStatus === "connecting" ? "#854d0e" : "#991b1b",
+    background:
+      wsStatus === "connected"
+        ? "#dcfce7"
+        : wsStatus === "connecting"
+          ? "#fef9c3"
+          : "#fee2e2",
+    color:
+      wsStatus === "connected"
+        ? "#166534"
+        : wsStatus === "connecting"
+          ? "#854d0e"
+          : "#991b1b",
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="app-container" style={{ textAlign: "center", paddingTop: "4rem" }}>
@@ -327,33 +395,41 @@ export default function SeatMapPage() {
     <>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
       <div className="app-container">
-        {/* Header */}
         <header className="page-header">
           <button className="back-link" aria-label="Quay lại" onClick={() => history.back()}>
             <i className="fa-solid fa-arrow-left" />
           </button>
           <h1>Chọn ghế chuyến đi</h1>
-          {/* Real-time connection badge */}
           <span style={wsBadgeStyle}>
-            <span style={{
-              width: 7, height: 7, borderRadius: "50%",
-              background: wsStatus === "connected" ? "#16a34a" : wsStatus === "connecting" ? "#ca8a04" : "#dc2626",
-              display: "inline-block",
-            }} />
-            {wsStatus === "connected" ? "Đồng bộ thời gian thực" : wsStatus === "connecting" ? "Đang kết nối..." : "Mất kết nối"}
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background:
+                  wsStatus === "connected"
+                    ? "#16a34a"
+                    : wsStatus === "connecting"
+                      ? "#ca8a04"
+                      : "#dc2626",
+                display: "inline-block",
+              }}
+            />
+            {wsStatus === "connected"
+              ? "Đồng bộ thời gian thực"
+              : wsStatus === "connecting"
+                ? "Đang kết nối..."
+                : "Mất kết nối"}
           </span>
         </header>
 
         <div className="main-content">
-          {/* ─ Left Panel ─ */}
           <div className="left-panel">
-            {/* Trip Info */}
             {seatMap && (
               <section className="trip-info-card card">
                 <div className="trip-header">
                   <span className="trip-code">
-                    <i className="fa-solid fa-plane-departure" />{" "}
-                    {seatMap.trip.flightNumber ?? seatMap.tripId}
+                    <i className="fa-solid fa-plane-departure" /> {seatMap.trip.flightNumber ?? seatMap.tripId}
                   </span>
                   <span className="trip-status">{seatMap.trip.status}</span>
                 </div>
@@ -366,9 +442,15 @@ export default function SeatMapPage() {
                     <div className="time-item">
                       <i className="fa-regular fa-clock" />
                       <span>
-                        {new Date(seatMap.trip.departureTime).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
-                        {" → "}
-                        {new Date(seatMap.trip.arrivalTime).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(seatMap.trip.departureTime).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                        {" -> "}
+                        {new Date(seatMap.trip.arrivalTime).toLocaleTimeString("vi-VN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </div>
                   </div>
@@ -376,28 +458,27 @@ export default function SeatMapPage() {
               </section>
             )}
 
-            {/* Legend */}
             <section className="legend-area card">
               <h3>Chú thích</h3>
               <div className="legend-items">
                 <div className="legend-item"><div className="seat-badge empty" /> Ghế trống</div>
                 <div className="legend-item"><div className="seat-badge selected" /> Đang chọn</div>
                 <div className="legend-item"><div className="seat-badge held" /> Đang giữ</div>
-                <div className="legend-item"><div className="seat-badge booked" /> Đã đặt / Ko bán</div>
+                <div className="legend-item"><div className="seat-badge booked" /> Đã đặt / Không bán</div>
               </div>
             </section>
 
-            {/* Seat Map */}
             <section className="seat-map-wrapper card">
               <div className="map-header">
                 <h3>Sơ đồ ghế ngồi</h3>
-                <p>Vui lòng click vào ghế trống để chọn.</p>
+                <p>Vui lòng nhấn vào ghế trống để chọn.</p>
               </div>
               <div className="seat-map-container">
                 <div className="seat-map-grid" id="seat-map-grid">
                   {Array.from(seatRows.entries()).map(([rowLabel, rowSeats]) => {
-                    const leftGroup = rowSeats.filter((s) => ["A", "B"].some((c) => s.seat_number.endsWith(c)));
-                    const rightGroup = rowSeats.filter((s) => ["C", "D"].some((c) => s.seat_number.endsWith(c)));
+                    const leftGroup = rowSeats.filter((seat) => ["A", "B"].some((code) => seat.seat_number.endsWith(code)));
+                    const rightGroup = rowSeats.filter((seat) => ["C", "D"].some((code) => seat.seat_number.endsWith(code)));
+
                     return (
                       <div key={rowLabel} className="seat-row">
                         <div className="seat-group">
@@ -405,12 +486,14 @@ export default function SeatMapPage() {
                             <div
                               key={seat._id}
                               className={`seat ${getSeatClass(seat)}`}
-                              title={`Ghế ${seat.seat_number} — ${formatCurrency(getSeatPrice(seat))}`}
+                              title={`Ghế ${seat.seat_number} - ${formatCurrency(getSeatPrice(seat))}`}
                               onClick={() => toggleSeat(seat)}
                             >
-                              {seat.status === "BOOKED" ? <i className="fa-solid fa-xmark" /> :
-                               seat.status === "HELD" && !selectedIds.has(seat._id) ? <i className="fa-solid fa-lock" /> :
-                               seat.seat_number}
+                              {seat.status === "BOOKED"
+                                ? <i className="fa-solid fa-xmark" />
+                                : seat.status === "HELD" && !selectedIds.has(seat._id)
+                                  ? <i className="fa-solid fa-lock" />
+                                  : seat.seat_number}
                             </div>
                           ))}
                         </div>
@@ -420,12 +503,14 @@ export default function SeatMapPage() {
                             <div
                               key={seat._id}
                               className={`seat ${getSeatClass(seat)}`}
-                              title={`Ghế ${seat.seat_number} — ${formatCurrency(getSeatPrice(seat))}`}
+                              title={`Ghế ${seat.seat_number} - ${formatCurrency(getSeatPrice(seat))}`}
                               onClick={() => toggleSeat(seat)}
                             >
-                              {seat.status === "BOOKED" ? <i className="fa-solid fa-xmark" /> :
-                               seat.status === "HELD" && !selectedIds.has(seat._id) ? <i className="fa-solid fa-lock" /> :
-                               seat.seat_number}
+                              {seat.status === "BOOKED"
+                                ? <i className="fa-solid fa-xmark" />
+                                : seat.status === "HELD" && !selectedIds.has(seat._id)
+                                  ? <i className="fa-solid fa-lock" />
+                                  : seat.seat_number}
                             </div>
                           ))}
                         </div>
@@ -437,7 +522,6 @@ export default function SeatMapPage() {
             </section>
           </div>
 
-          {/* ─ Right Panel ─ */}
           <div className="right-panel">
             <div className="summary-card card sticky">
               <h2>Chi tiết đặt chỗ</h2>
@@ -452,7 +536,17 @@ export default function SeatMapPage() {
               )}
 
               {apiError && (
-                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "0.75rem 1rem", marginBottom: "1rem", color: "#b91c1c", fontSize: "0.9rem" }}>
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: "8px",
+                    padding: "0.75rem 1rem",
+                    marginBottom: "1rem",
+                    color: "#b91c1c",
+                    fontSize: "0.9rem",
+                  }}
+                >
                   <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: "0.5rem" }} />
                   {apiError}
                 </div>

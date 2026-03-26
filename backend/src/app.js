@@ -3,7 +3,6 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 
-// Import config và các route
 const env = require("./config/env");
 const healthRoutes = require("./routes/health.routes");
 const authRoutes = require("./routes/auth.routes");
@@ -11,43 +10,37 @@ const bookingRoutes = require("./routes/booking.routes");
 const seatRoutes = require("./routes/seat.routes");
 const searchRoutes = require("./routes/search.routes");
 const paymentRoutes = require("./routes/payment.routes");
-
-// Import các middleware
-const authMiddleware = require("./middleware/authMiddleware");
+const paymentMethodRoutes = require("./routes/paymentMethod.routes");
+const passengerRoutes = require("./routes/passenger.routes");
 const errorHandler = require("./middleware/errorHandler");
 
-// Tạo ứng dụng Express
 const app = express();
 
-// Middleware cấu hình ứng dụng
-app.use(helmet()); // Bảo mật cho ứng dụng
-app.use(cors({ origin: env.corsOrigin, credentials: true })); // CORS
-app.use(express.json({ limit: "1mb" })); // Giới hạn kích thước payload của body
-app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev")); // Logging
+app.use(helmet());
+app.use(cors({ origin: env.corsOrigin, credentials: true }));
+app.use(express.json({ limit: "5mb" }));
+app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
 
-// Routes: Public và Protected
-app.use("/api/auth", authRoutes); // Đăng ký, đăng nhập (public routes)
-app.use("/api/health", healthRoutes); // Kiểm tra tình trạng server
+// Public routes
+app.use("/api/auth", authRoutes);
+app.use("/api/health", healthRoutes);
 app.use("/api", searchRoutes);
+app.use("/api/seats", seatRoutes);
+app.use("/api/passengers", passengerRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/payment-methods", paymentMethodRoutes);
 
-// Các route yêu cầu xác thực người dùng (Protected Routes)
-app.use("/api/bookings", bookingRoutes); // Đặt vé, thanh toán (Cho phép cả vãng lai và user đăng nhập)
-app.use("/api/seats", authMiddleware, seatRoutes); // Quản lý ghế
+// Booking routes keep their own authorization logic.
+app.use("/api/bookings", bookingRoutes);
 
-const passengerRoutes = require("./routes/passenger.routes");
-app.use("/api/passengers", passengerRoutes); // Luồng thông tin hành khách (Lưu Draft)
-app.use("/api/payments", paymentRoutes); // API Điều hướng Thanh Toán Tách Rời
-
-// Xử lý route không tìm thấy (404)
 app.use((req, res) => {
-	res.status(404).json({
-		success: false,
-		message: "Not Found",
-		errors: { code: "NOT_FOUND" },
-	});
+  res.status(404).json({
+    success: false,
+    message: "Not Found",
+    errors: { code: "NOT_FOUND" },
+  });
 });
 
-// Xử lý lỗi chung cho toàn ứng dụng
-app.use(errorHandler); // Middleware xử lý lỗi (errorHandler)
+app.use(errorHandler);
 
 module.exports = app;

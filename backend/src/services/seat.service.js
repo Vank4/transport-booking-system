@@ -217,6 +217,7 @@ async function holdSeats({ seatIds, tripType, tripId, userId }) {
 async function releaseSeats({ seatIds, tripId, userId }) {
 	validateSeatIds(seatIds);
 	validateObjectId(tripId, "tripId");
+	const now = new Date();
 
 	const seats = await Seat.find({ _id: { $in: seatIds } });
 	if (seats.length !== seatIds.length) {

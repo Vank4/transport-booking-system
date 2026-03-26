@@ -31,11 +31,11 @@ export default function VoucherPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(
     voucherResult ? `Mã ${voucherResult.voucher_code} đã được áp dụng!` : null
-    
   );
 
-  // Load booking if not in store
   useEffect(() => {
+    let cancelled = false;
+
     if (bookingData || !bookingId) {
       setPageLoading(false);
       return;
@@ -43,13 +43,17 @@ export default function VoucherPage() {
     (async () => {
       try {
         const data = await getBookingDetails(bookingId);
-        setBookingData(data);
+        if (!cancelled) setBookingData(data);
       } catch {
-        // Ignore — user should go back to checkout
+        // Ignore - user should go back to checkout
       } finally {
-        setPageLoading(false);
+        if (!cancelled) setPageLoading(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [bookingId, bookingData, setBookingData]);
 
   const handleApplyVoucher = async () => {
@@ -64,7 +68,6 @@ export default function VoucherPage() {
       setVoucherResult(result);
       setSuccess(`Mã "${result.voucher_code}" áp dụng thành công! Bạn tiết kiệm ${formatCurrency(result.discount_amount)}`);
 
-      // Refresh booking data with new total
       const updated = await getBookingDetails(bookingId);
       setBookingData(updated);
     } catch (err: unknown) {
@@ -90,7 +93,6 @@ export default function VoucherPage() {
 
   return (
     <div className="min-h-screen pb-20">
-      {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center gap-3 mb-4">
@@ -106,9 +108,7 @@ export default function VoucherPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-3xl mx-auto px-4 mt-8 space-y-6">
-        {/* Voucher input card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -120,11 +120,10 @@ export default function VoucherPage() {
             </div>
             <div>
               <h2 className="font-semibold text-gray-900">Nhập mã giảm giá</h2>
-              <p className="text-sm text-gray-500">Nhập mã khuyến mãi để được giảm giá cho chuyến đi</p>
+              <p className="text-sm text-gray-500">Nhập mã khuyến mại để được giảm giá cho chuyến đi</p>
             </div>
           </div>
 
-          {/* Input */}
           <div className="flex gap-3">
             <input
               type="text"
@@ -151,7 +150,6 @@ export default function VoucherPage() {
             </button>
           </div>
 
-          {/* Feedback messages */}
           <AnimatePresence mode="wait">
             {error && (
               <motion.div
@@ -181,7 +179,6 @@ export default function VoucherPage() {
           </AnimatePresence>
         </motion.div>
 
-        {/* Price comparison */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -217,7 +214,6 @@ export default function VoucherPage() {
           </div>
         </motion.div>
 
-        {/* Voucher tips */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -238,7 +234,6 @@ export default function VoucherPage() {
           </div>
         </motion.div>
 
-        {/* Action buttons */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}

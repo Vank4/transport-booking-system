@@ -25,6 +25,8 @@ function CheckoutContent() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!bookingId) {
       setError('Không tìm thấy mã booking trong URL');
       setLoading(false);
@@ -41,20 +43,25 @@ function CheckoutContent() {
 
     (async () => {
       try {
-        setLoading(true);
+        if (!cancelled) setLoading(true);
         const data = await getBookingDetails(bookingId);
-        setBooking(data);
-        setBookingData(data);
+        if (!cancelled) {
+          setBooking(data);
+          setBookingData(data);
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Có lỗi xảy ra khi tải thông tin booking';
-        setError(message);
+        if (!cancelled) setError(message);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [bookingId, storeData, setBookingId, setBookingData]);
 
-  // ─── Loading State ──────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -66,7 +73,6 @@ function CheckoutContent() {
     );
   }
 
-  // ─── Error State ────────────────────────────────────────────
   if (error || !booking) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -93,7 +99,6 @@ function CheckoutContent() {
 
   return (
     <div className="min-h-screen pb-20">
-      {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-8">
@@ -117,21 +122,17 @@ function CheckoutContent() {
         </div>
       </div>
 
-      {/* Countdown Timer */}
       {booking.booking_summary.expires_at && (
         <CountdownTimer expiresAt={booking.booking_summary.expires_at} />
       )}
 
-      {/* Content */}
       <div className="max-w-5xl mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main content */}
           <div className="lg:col-span-2 space-y-6">
             <TripDetailsCard booking={booking_summary} />
             <PassengerList passengers={passengers} />
           </div>
 
-          {/* Sidebar */}
           <div className="space-y-6">
             <PriceBreakdown
               passengers={passengers}
@@ -139,14 +140,12 @@ function CheckoutContent() {
               voucherResult={voucherResult}
             />
 
-            {/* Action buttons */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
               className="space-y-3"
             >
-              {/* Apply voucher */}
               <button
                 onClick={() => router.push(`/user/booking/voucher?bookingId=${bookingId}`)}
                 className="btn-outline w-full"
@@ -155,7 +154,6 @@ function CheckoutContent() {
                 {voucherResult ? 'Thay đổi mã giảm giá' : 'Áp dụng mã giảm giá'}
               </button>
 
-              {/* Proceed to payment */}
               <button
                 onClick={() => router.push(`/user/booking/payment?bookingId=${bookingId}`)}
                 className="btn-primary w-full text-base py-4"
@@ -165,7 +163,6 @@ function CheckoutContent() {
                 Tiến hành thanh toán
               </button>
 
-              {/* Back */}
               <button
                 onClick={() => router.back()}
                 className="btn-secondary w-full"
@@ -175,7 +172,6 @@ function CheckoutContent() {
               </button>
             </motion.div>
 
-            {/* Info note */}
             <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
               <p className="text-xs text-blue-700 leading-relaxed">
                 <strong>Lưu ý:</strong> Vé được giữ trong thời gian giới hạn.

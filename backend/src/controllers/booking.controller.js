@@ -4,6 +4,76 @@ const Seat = require("../models/seats.model");
 const Ticket = require("../models/tickets.model");
 const Voucher = require("../models/vouchers.model");
 const FlightFare = require("../models/flightFares.model");
+const Flight = require("../models/flights.model");
+const TrainTrip = require("../models/trainTrips.model");
+const Airport = require("../models/airports.model");
+const TrainStation = require("../models/trainStations.model");
+const Airline = require("../models/airlines.model");
+const Train = require("../models/trains.model");
+
+function mapBookingStatus(status) {
+  if (status === "CONFIRMED") return "paid";
+  if (status === "WAITING_PAYMENT" || status === "PENDING") return "pending";
+  return "expired";
+}
+
+async function buildFlightBookingView(booking) {
+  const flight = await Flight.findById(booking.trip_id).lean();
+  if (!flight) return null;
+
+  const [departureAirport, arrivalAirport, airline] = await Promise.all([
+    Airport.findById(flight.departure_airport_id).lean(),
+    Airport.findById(flight.arrival_airport_id).lean(),
+    Airline.findById(flight.airline_id).lean(),
+  ]);
+
+  const origin = departureAirport?.city || "Ch\u01b0a x\u00e1c \u0111\u1ecbnh";
+  const destination = arrivalAirport?.city || "Ch\u01b0a x\u00e1c \u0111\u1ecbnh";
+
+  return {
+    id: booking._id,
+    code: booking.booking_code,
+    route: `${origin} \u2192 ${destination}`,
+    origin,
+    destination,
+    bookingDate: booking.created_at,
+    departureDate: flight.departure_time,
+    arrivalDate: flight.arrival_time,
+    status: mapBookingStatus(booking.status),
+    transportType: "flight",
+    carrier: airline?.name || flight.flight_number || "Chuy\u1ebfn bay",
+    price: booking.total_amount,
+  };
+}
+
+async function buildTrainBookingView(booking) {
+  const trainTrip = await TrainTrip.findById(booking.trip_id).lean();
+  if (!trainTrip) return null;
+
+  const [departureStation, arrivalStation, train] = await Promise.all([
+    TrainStation.findById(trainTrip.departure_station_id).lean(),
+    TrainStation.findById(trainTrip.arrival_station_id).lean(),
+    Train.findById(trainTrip.train_id).lean(),
+  ]);
+
+  const origin = departureStation?.city || departureStation?.name || "Ch\u01b0a x\u00e1c \u0111\u1ecbnh";
+  const destination = arrivalStation?.city || arrivalStation?.name || "Ch\u01b0a x\u00e1c \u0111\u1ecbnh";
+
+  return {
+    id: booking._id,
+    code: booking.booking_code,
+    route: `${origin} \u2192 ${destination}`,
+    origin,
+    destination,
+    bookingDate: booking.created_at,
+    departureDate: trainTrip.departure_time,
+    arrivalDate: trainTrip.arrival_time,
+    status: mapBookingStatus(booking.status),
+    transportType: "train",
+    carrier: train?.name || train?.train_number || "Chuy\u1ebfn t\u00e0u",
+    price: booking.total_amount,
+  };
+}
 
 
 // Tạo booking mới
@@ -20,7 +90,7 @@ exports.createBooking = async (req, res) => {
 
     let total_amount = 0;
 
-    // Map để tra cứu giá từng ghế nhanh hơn (seat_id → final_price)
+    // Map để tra cứu giá từng ghế nhanh hơn (seat_id \u2192 final_price)
     const seatPriceMap = {};
 
     for (let seat of seatDocs) {
@@ -113,7 +183,7 @@ exports.processPayment = async (req, res) => {
     }
 
     // kiểm tra booking thuộc user
-    if (booking.user_id.toString() !== req.user.id) {
+    if (booking.user_id.toString() !== req.user.userId) {
       return res.status(403).json({
         message: "You are not allowed to pay for this booking",
       });
@@ -150,12 +220,24 @@ exports.processPayment = async (req, res) => {
 exports.getAllBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({
-      user_id: req.user.id,
-    }).sort({ created_at: -1 });
+      user_id: req.user.userId,
+    })
+      .sort({ created_at: -1 })
+      .lean();
+
+    const data = (
+      await Promise.all(
+        bookings.map((booking) =>
+          booking.booking_type === "FLIGHT"
+            ? buildFlightBookingView(booking)
+            : buildTrainBookingView(booking),
+        ),
+      )
+    ).filter(Boolean);
 
     res.status(200).json({
-      count: bookings.length,
-      bookings,
+      count: data.length,
+      data,
     });
   } catch (err) {
     console.error(err);
@@ -336,3 +418,4 @@ exports.getBookingById = async (req, res) => {
     res.status(500).json({ success: false, message: "Lỗi hệ thống khi tải thông tin xác nhận!" });
   }
 };
+

@@ -35,7 +35,7 @@ const PAYMENT_OPTIONS: PaymentOption[] = [
   {
     id: 'VNPAY',
     name: 'VNPay',
-    description: 'Thanh toán qua cổng VNPay: thẻ ATM, Visa, MasterCard, QR Code',
+    description: 'Thanh toán qua cổng VNPay: thẻ ATM, Visa, MasterCard, mã QR',
     icon: <CreditCard className="w-6 h-6" />,
     available: true,
   },
@@ -84,6 +84,8 @@ export default function PaymentPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (bookingData) {
       setBooking(bookingData);
       setPageLoading(false);
@@ -96,14 +98,20 @@ export default function PaymentPage() {
     (async () => {
       try {
         const data = await getBookingDetails(bookingId);
-        setBooking(data);
-        setBookingData(data);
+        if (!cancelled) {
+          setBooking(data);
+          setBookingData(data);
+        }
       } catch {
-        setError('Không thể tải thông tin booking');
+        if (!cancelled) setError('Không thể tải thông tin booking');
       } finally {
-        setPageLoading(false);
+        if (!cancelled) setPageLoading(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [bookingId, bookingData, setBookingData]);
 
   const handlePayment = async () => {
@@ -116,7 +124,6 @@ export default function PaymentPage() {
     try {
       if (selectedMethod === 'VNPAY') {
         const paymentUrl = await createVnpayPayment(bookingId);
-        // Redirect to VNPay payment gateway
         window.location.href = paymentUrl;
       } else if (selectedMethod === 'MOCK') {
         await mockConfirmPayment(bookingId, 'SUCCESS');
@@ -144,7 +151,6 @@ export default function PaymentPage() {
 
   return (
     <div className="min-h-screen pb-20">
-      {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center gap-3 mb-4">
@@ -164,10 +170,8 @@ export default function PaymentPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-5xl mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Payment methods */}
           <div className="lg:col-span-2 space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -196,7 +200,6 @@ export default function PaymentPage() {
                         }
                       `}
                     >
-                      {/* Radio dot */}
                       <div className={`
                         w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0
                         ${isSelected ? 'border-brand-500' : 'border-gray-300'}
@@ -210,7 +213,6 @@ export default function PaymentPage() {
                         )}
                       </div>
 
-                      {/* Icon */}
                       <div className={`
                         w-12 h-12 rounded-xl flex items-center justify-center
                         ${isSelected ? 'bg-brand-100 text-brand-600' : 'bg-gray-100 text-gray-500'}
@@ -218,7 +220,6 @@ export default function PaymentPage() {
                         {option.icon}
                       </div>
 
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-900">{option.name}</span>
@@ -242,7 +243,6 @@ export default function PaymentPage() {
               </div>
             </motion.div>
 
-            {/* Terms */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -267,7 +267,6 @@ export default function PaymentPage() {
             </motion.div>
           </div>
 
-          {/* Sidebar - Order summary */}
           <div className="space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -293,7 +292,7 @@ export default function PaymentPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-500">Loại vé</span>
                     <span className="font-medium">
-                      {booking.booking_summary.type === 'FLIGHT' ? '✈️ Máy bay' : '🚆 Tàu hỏa'}
+                      {booking.booking_summary.type === 'FLIGHT' ? 'Máy bay' : 'Tàu hỏa'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -318,7 +317,6 @@ export default function PaymentPage() {
               )}
             </motion.div>
 
-            {/* Pay button */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -350,7 +348,6 @@ export default function PaymentPage() {
               </button>
             </motion.div>
 
-            {/* Error */}
             {error && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -362,7 +359,6 @@ export default function PaymentPage() {
               </motion.div>
             )}
 
-            {/* Security */}
             <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
               <Lock className="w-3 h-3" />
               <span>Mã hóa SSL 256-bit · Thanh toán an toàn</span>

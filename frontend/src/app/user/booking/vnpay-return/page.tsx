@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -43,6 +43,7 @@ export default function ResultPage() {
   const searchParams = useSearchParams();
   const bookingId = searchParams.get('bookingId');
   const isMock = searchParams.get('mock') === 'true';
+  const queryString = searchParams.toString();
 
   // VNPay return params
   const vnpResponseCode = searchParams.get('vnp_ResponseCode');
@@ -62,81 +63,82 @@ export default function ResultPage() {
 
   const isSuccess = payment?.status === 'SUCCESS';
 
-  const loadData = useCallback(async () => {
-    if (!bookingId && !vnpResponseCode) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // If coming from VNPay redirect, verify the return first
-      if (vnpResponseCode && !isMock) {
-        const queryString = searchParams.toString();
-        // Fire and forget verification, or assume success if signature is valid.
-        await verifyVnpayReturn(queryString).catch(() => { });
-      }
-
-      if (bookingId) {
-        // Load payment status if we have the bookingId
-        const paymentData = await getPaymentStatus(bookingId);
-        setPayment(paymentData);
-
-        try {
-          const bookingData = await getBookingDetails(bookingId);
-          setBooking(bookingData);
-        } catch { }
-      } else if (vnpResponseCode) {
-        // Fallback: Parse info directly from VNPay URL when bookingId is missing
-        const code = vnpOrderInfo ? vnpOrderInfo.split(' ').pop() : '';
-        const rawAmount = parseInt(vnpAmount || '0');
-        const amount = rawAmount > 0 ? rawAmount / 100 : 0;
-
-        // Parse VNPay Date Format: yyyyMMddHHmmss
-        let formattedDate = new Date().toISOString();
-        if (vnpPayDate && vnpPayDate.length === 14) {
-          const year = vnpPayDate.substring(0, 4);
-          const month = vnpPayDate.substring(4, 6);
-          const day = vnpPayDate.substring(6, 8);
-          const hour = vnpPayDate.substring(8, 10);
-          const min = vnpPayDate.substring(10, 12);
-          const sec = vnpPayDate.substring(12, 14);
-          formattedDate = `${year}-${month}-${day}T${hour}:${min}:${sec}Z`;
-        }
-
-        setPayment({
-          _id: vnpTxnRef || '',
-          booking_id: '',
-          method: 'VNPAY',
-          amount: amount,
-          status: vnpResponseCode === '00' ? 'SUCCESS' : 'FAILED',
-          transaction_id: vnpBankTranNo || '',
-          paid_at: formattedDate,
-          createdAt: formattedDate,
-          updatedAt: formattedDate,
-        });
-
-        if (code && code !== 'hang') {
-          setBooking({
-            booking_summary: { code, type: 'FLIGHT', status: vnpResponseCode === '00' ? 'CONFIRMED' : 'FAILED' } as any,
-            financials: { total_amount: amount } as any,
-            passengers: []
-          });
-        }
-      }
-    } catch {
-      // Unlikely to hit this generic catch now since we handle fallback above
-    } finally {
-      setLoading(false);
-    }
-  }, [bookingId, vnpResponseCode, isMock, searchParams, vnpOrderInfo, vnpAmount, vnpTxnRef, vnpBankTranNo, vnpPayDate]);
-
   useEffect(() => {
+    let cancelled = false;
+
+    const loadData = async () => {
+      if (!bookingId && !vnpResponseCode) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      try {
+        // If coming from VNPay redirect, verify the return first.
+        // Use the serialized query string so the effect depends on a stable primitive.
+        if (vnpResponseCode && !isMock) {
+          await verifyVnpayReturn(queryString).catch(() => {});
+        }
+
+        if (bookingId) {
+          const paymentData = await getPaymentStatus(bookingId);
+          if (!cancelled) setPayment(paymentData);
+
+          try {
+            const bookingData = await getBookingDetails(bookingId);
+            if (!cancelled) setBooking(bookingData);
+          } catch {}
+        } else if (vnpResponseCode) {
+          const code = vnpOrderInfo ? vnpOrderInfo.split(' ').pop() : '';
+          const rawAmount = parseInt(vnpAmount || '0');
+          const amount = rawAmount > 0 ? rawAmount / 100 : 0;
+
+          let formattedDate = new Date().toISOString();
+          if (vnpPayDate && vnpPayDate.length === 14) {
+            const year = vnpPayDate.substring(0, 4);
+            const month = vnpPayDate.substring(4, 6);
+            const day = vnpPayDate.substring(6, 8);
+            const hour = vnpPayDate.substring(8, 10);
+            const min = vnpPayDate.substring(10, 12);
+            const sec = vnpPayDate.substring(12, 14);
+            formattedDate = `${year}-${month}-${day}T${hour}:${min}:${sec}Z`;
+          }
+
+          if (!cancelled) {
+            setPayment({
+              _id: vnpTxnRef || '',
+              booking_id: '',
+              method: 'VNPAY',
+              amount: amount,
+              status: vnpResponseCode === '00' ? 'SUCCESS' : 'FAILED',
+              transaction_id: vnpBankTranNo || '',
+              paid_at: formattedDate,
+              createdAt: formattedDate,
+              updatedAt: formattedDate,
+            });
+
+            if (code && code !== 'hang') {
+              setBooking({
+                booking_summary: { code, type: 'FLIGHT', status: vnpResponseCode === '00' ? 'CONFIRMED' : 'FAILED' } as any,
+                financials: { total_amount: amount } as any,
+                passengers: []
+              });
+            }
+          }
+        }
+      } catch {
+        // Intentionally swallow here so the page can still render fallback details.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
     loadData();
-    // Clean up the booking store after viewing results
+
     return () => {
+      cancelled = true;
       reset();
     };
-  }, [loadData, reset]);
+  }, [bookingId, vnpResponseCode, isMock, queryString, vnpOrderInfo, vnpAmount, vnpTxnRef, vnpBankTranNo, vnpPayDate, reset]);
 
   const handleCopyCode = () => {
     const code = booking?.booking_summary.code ?? '';

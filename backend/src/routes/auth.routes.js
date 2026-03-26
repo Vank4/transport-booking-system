@@ -14,9 +14,19 @@ router.post("/refresh-token", authController.refreshToken);
 
 // Xem hồ sơ cá nhân
 router.get("/profile", authMiddleware, authController.getProfile);
+router.get(
+  "/profile-preferences",
+  authMiddleware,
+  authController.getProfilePreferences,
+);
 
 // Cập nhật hồ sơ cá nhân
 router.put("/update-profile", authMiddleware, authController.updateProfile);
+router.put(
+  "/profile-preferences",
+  authMiddleware,
+  authController.updateProfilePreferences,
+);
 
 // Xem danh sách booking của tôi
 router.get("/my-bookings", authMiddleware, authController.myBookings);

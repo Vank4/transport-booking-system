@@ -3,9 +3,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { authService } from '@/services/auth.service';
 import Image from 'next/image';
+import api from '@/lib/api';
+import { isAuthenticated, persistAuthSession, type UserRole } from '@/lib/auth';
 
 // 1. Khai báo danh sách ảnh và slogan đi kèm
 const slides = [
@@ -16,6 +18,8 @@ const slides = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTarget = searchParams.get('redirect') || '/';
   
   // 2. Logic Slideshow
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -34,6 +38,12 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (isAuthenticated()) {
+      router.replace(redirectTarget);
+    }
+  }, [redirectTarget, router]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -41,9 +51,27 @@ export default function LoginPage() {
 
     try {
       const data = await authService.login(email, password);
-      if (data.accessToken) localStorage.setItem('accessToken', data.accessToken);
-      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-      router.push('/');
+      let role: UserRole | null = null;
+
+      persistAuthSession({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
+
+      try {
+        const profileRes = await api.get<{ data?: { role?: UserRole } }>('/auth/profile');
+        role = profileRes.data?.data?.role ?? null;
+      } catch {
+        role = null;
+      }
+
+      persistAuthSession({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        role,
+      });
+
+      router.replace(redirectTarget);
     } catch (err: any) {
       setError(err.message || 'Đăng nhập thất bại');
     } finally {

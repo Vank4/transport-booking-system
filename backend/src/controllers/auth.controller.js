@@ -45,7 +45,7 @@ exports.loginUser = async (req, res) => {
   }
 };
 
-// ─── Refresh Access Token ─────────────────────────────────────────
+// Refresh access token
 exports.refreshToken = async (req, res) => {
   try {
     const result = await authService.refreshToken(req.body);
@@ -57,7 +57,7 @@ exports.refreshToken = async (req, res) => {
   }
 };
 
-// ─── Xem hồ sơ cá nhân ─────────────────────────────────────────
+// Get profile
 exports.getProfile = async (req, res) => {
   try {
     const user = await authService.getProfile(req.user.userId);
@@ -81,19 +81,44 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// ─── Update Profile ─────────────────────────────────────────
+exports.getProfilePreferences = async (req, res) => {
+  try {
+    const data = await authService.getProfilePreferences(req.user.userId);
+
+    return res.status(200).json({
+      message: "Get profile preferences success",
+      data,
+    });
+  } catch (err) {
+    handleError(res, err, "getProfilePreferences");
+  }
+};
+
+// Update profile
 exports.updateProfile = async (req, res) => {
   try {
     const result = await authService.updateProfile(req.user.userId, req.body);
 
     return res.status(200).json(result);
   } catch (err) {
-    console.error("[updateProfile]", err);
-    return res.status(500).json({ message: err.message });
+    handleError(res, err, "updateProfile");
   }
 };
 
-// ─── My Bookings ─────────────────────────────────────────
+exports.updateProfilePreferences = async (req, res) => {
+  try {
+    const data = await authService.updateProfilePreferences(req.user.userId, req.body);
+
+    return res.status(200).json({
+      message: "Profile preferences updated successfully.",
+      data,
+    });
+  } catch (err) {
+    handleError(res, err, "updateProfilePreferences");
+  }
+};
+
+// My Bookings
 exports.myBookings = async (req, res) => {
   try {
     const result = await authService.myBookings(req.user.userId);
@@ -105,7 +130,7 @@ exports.myBookings = async (req, res) => {
   }
 };
 
-// ─── Change Password ─────────────────────────────────────────
+// Change password
 exports.changePassword = async (req, res) => {
   try {
     const result = await authService.changePassword(req.user.userId, req.body);

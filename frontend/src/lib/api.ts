@@ -1,5 +1,12 @@
 import axios from 'axios';
 import config from '@/config';
+import {
+  buildLoginRedirect,
+  clearAuthSession,
+  getAccessToken,
+  getRefreshToken,
+  persistAuthSession,
+} from '@/lib/auth';
 import type {
   ApiResponse,
   BookingDetails,
@@ -13,16 +20,72 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const refreshClient = axios.create({
+  baseURL: config.apiBaseUrl,
+  headers: { 'Content-Type': 'application/json' },
+});
+
 // Attach JWT token from localStorage if available
 api.interceptors.request.use((req) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
-    if (token && req.headers) {
-      req.headers.Authorization = `Bearer ${token}`;
-    }
+  const token = getAccessToken();
+  if (token && req.headers) {
+    req.headers.Authorization = `Bearer ${token}`;
   }
   return req;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error?.config;
+    const status = error?.response?.status;
+    const backendMessage = error?.response?.data?.message;
+
+    if (
+      status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !String(originalRequest.url || '').includes('/auth/login') &&
+      !String(originalRequest.url || '').includes('/auth/refresh-token')
+    ) {
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        originalRequest._retry = true;
+        try {
+          const { data } = await refreshClient.post('/auth/refresh-token', {
+            refreshToken,
+          });
+
+          const nextAccessToken = data?.accessToken;
+          if (nextAccessToken) {
+            persistAuthSession({
+              accessToken: nextAccessToken,
+              refreshToken,
+            });
+
+            originalRequest.headers = originalRequest.headers ?? {};
+            originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
+            return api(originalRequest);
+          }
+        } catch {
+          // Fall through to session clear + login redirect
+        }
+      }
+
+      clearAuthSession();
+      if (typeof window !== 'undefined') {
+        const redirectPath = `${window.location.pathname}${window.location.search}`;
+        window.location.href = buildLoginRedirect(redirectPath);
+      }
+    }
+
+    if (backendMessage) {
+      return Promise.reject(new Error(backendMessage));
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // ─── Booking APIs ─────────────────────────────────────────────
 export async function getBookingDetails(bookingId: string): Promise<BookingDetails> {
