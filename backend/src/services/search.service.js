@@ -74,14 +74,7 @@ const findFlights = async ({
   limit = 20,
   filters = {},
 }) => {
-  if (!origin || !destination || !departureDate) {
-    const error = new Error("Missing required search parameters");
-    error.status = 400;
-    error.code = "VALIDATION_ERROR";
-    throw error;
-  }
-
-  if (origin.toUpperCase() === destination.toUpperCase()) {
+  if (origin && destination && origin.toUpperCase() === destination.toUpperCase()) {
     const error = new Error("Diem di va diem den khong duoc trung nhau");
     error.status = 400;
     error.code = "VALIDATION_ERROR";
@@ -89,38 +82,42 @@ const findFlights = async ({
   }
 
   const passengerCount = parseInt(passengers, 10) || 1;
-  const [originAirport, destAirport] = await Promise.all([
-    Airport.findOne({ iata_code: origin.toUpperCase() }),
-    Airport.findOne({ iata_code: destination.toUpperCase() }),
-  ]);
-
-  if (!originAirport || !destAirport)
-    return { trips: [], total: 0, page, limit };
-
   const query = {
-    departure_airport_id: originAirport._id,
-    arrival_airport_id: destAirport._id,
     status: "SCHEDULED",
   };
 
-  const startOfDay = new Date(departureDate);
-  const endOfDay = new Date(departureDate);
-
-  if (filters.time_from) {
-    const [h, m] = filters.time_from.split(":");
-    startOfDay.setUTCHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
-  } else {
-    startOfDay.setUTCHours(0, 0, 0, 0);
+  if (origin) {
+    const originAirport = await Airport.findOne({ iata_code: origin.toUpperCase() });
+    if (!originAirport) return { trips: [], total: 0, page, limit, filter_counts: {} };
+    query.departure_airport_id = originAirport._id;
   }
 
-  if (filters.time_to) {
-    const [h, m] = filters.time_to.split(":");
-    endOfDay.setUTCHours(parseInt(h, 10), parseInt(m, 10), 59, 999);
-  } else {
-    endOfDay.setUTCHours(23, 59, 59, 999);
+  if (destination) {
+    const destAirport = await Airport.findOne({ iata_code: destination.toUpperCase() });
+    if (!destAirport) return { trips: [], total: 0, page, limit, filter_counts: {} };
+    query.arrival_airport_id = destAirport._id;
   }
 
-  query.departure_time = { $gte: startOfDay, $lte: endOfDay };
+  if (departureDate) {
+    const startOfDay = new Date(departureDate);
+    const endOfDay = new Date(departureDate);
+
+    if (filters.time_from) {
+      const [h, m] = filters.time_from.split(":");
+      startOfDay.setUTCHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+    } else {
+      startOfDay.setUTCHours(0, 0, 0, 0);
+    }
+
+    if (filters.time_to) {
+      const [h, m] = filters.time_to.split(":");
+      endOfDay.setUTCHours(parseInt(h, 10), parseInt(m, 10), 59, 999);
+    } else {
+      endOfDay.setUTCHours(23, 59, 59, 999);
+    }
+
+    query.departure_time = { $gte: startOfDay, $lte: endOfDay };
+  }
 
   const seatClass = filters.seat_class
     ? filters.seat_class.toLowerCase()
@@ -161,10 +158,17 @@ const findFlights = async ({
     });
 
     if (availableSeats >= passengerCount) {
+      const resolvedPrices = {
+        economy: flight.prices?.economy ?? 1500000,
+        business: flight.prices?.business ?? 3000000,
+      };
       validFlights.push({
         ...flight,
+        prices: resolvedPrices,
         available_seats_count: availableSeats,
-        current_price: flight.prices[seatClass],
+        current_price:
+          resolvedPrices[seatClass] ??
+          resolvedPrices.economy,
       });
     }
   }
@@ -196,13 +200,14 @@ const findFlights = async ({
       filter_counts.departure_time.evening += 1;
   });
 
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = clampLimit(limit, 20);
   return {
     trips: validFlights.slice((pageNum - 1) * limitNum, pageNum * limitNum),
     total: validFlights.length,
     page: pageNum,
     limit: limitNum,
+    filter_counts,
   };
 };
 
@@ -212,53 +217,52 @@ const findTrainTrips = async ({
   departureDate,
   page = 1,
   limit = 20,
+  sort,
   filters = {},
 }) => {
-  if (!origin || !destination || !departureDate) {
-    const error = new Error("Missing parameters");
-    error.status = 400;
-    error.code = "VALIDATION_ERROR";
-    throw error;
-  }
-
-  const [originStation, destStation] = await Promise.all([
-    TrainStation.findOne({ name: origin }),
-    TrainStation.findOne({ name: destination }),
-  ]);
-
-  if (!originStation || !destStation)
-    return { trips: [], total: 0, page, limit };
-
   let validTripIds = null;
   const carriageQuery = {};
 
   if (filters.seat_class) carriageQuery.type = filters.seat_class.toUpperCase();
   if (filters.min_price || filters.max_price) {
     carriageQuery.base_price = {};
-    if (filters.min_price)
-      carriageQuery.base_price.$gte = Number(filters.min_price);
-    if (filters.max_price)
-      carriageQuery.base_price.$lte = Number(filters.max_price);
+    if (filters.min_price) carriageQuery.base_price.$gte = Number(filters.min_price);
+    if (filters.max_price) carriageQuery.base_price.$lte = Number(filters.max_price);
   }
 
   if (Object.keys(carriageQuery).length > 0) {
-    const carriages =
-      await TrainCarriage.find(carriageQuery).select("train_trip_id");
+    const carriages = await TrainCarriage.find(carriageQuery).select("train_trip_id");
     validTripIds = carriages.map((carriage) => carriage.train_trip_id);
-    if (validTripIds.length === 0) return { trips: [], total: 0, page, limit };
+    if (validTripIds.length === 0) {
+      return { trips: [], total: 0, page, limit, filter_counts: {} };
+    }
   }
 
-  const query = {
-    departure_station_id: originStation._id,
-    arrival_station_id: destStation._id,
-    status: "SCHEDULED",
-  };
+  const query = { status: "SCHEDULED" };
   if (validTripIds) query._id = { $in: validTripIds };
 
-  const searchDate = new Date(departureDate);
-  const start = new Date(searchDate).setUTCHours(0, 0, 0, 0);
-  const end = new Date(searchDate).setUTCHours(23, 59, 59, 999);
-  query.departure_time = { $gte: start, $lte: end };
+  if (origin) {
+    const originStation = await TrainStation.findOne({ name: origin });
+    if (!originStation) {
+      return { trips: [], total: 0, page, limit, filter_counts: {} };
+    }
+    query.departure_station_id = originStation._id;
+  }
+
+  if (destination) {
+    const destStation = await TrainStation.findOne({ name: destination });
+    if (!destStation) {
+      return { trips: [], total: 0, page, limit, filter_counts: {} };
+    }
+    query.arrival_station_id = destStation._id;
+  }
+
+  if (departureDate) {
+    const searchDate = new Date(departureDate);
+    const start = new Date(searchDate).setUTCHours(0, 0, 0, 0);
+    const end = new Date(searchDate).setUTCHours(23, 59, 59, 999);
+    query.departure_time = { $gte: start, $lte: end };
+  }
 
   const trips = await TrainTrip.find(query)
     .populate("train_id", "train_number name")
@@ -266,26 +270,21 @@ const findTrainTrips = async ({
     .populate("arrival_station_id", "name city")
     .lean();
 
-  // Gắn giá thấp nhất theo ĐÚNG HẠNG GHẾ để Frontend hiển thị và Sort
-  for (const t of trips) {
-    const carriageCondition = { train_trip_id: t._id };
-
-    // NẾU CÓ LỌC HẠNG GHẾ, CHỈ TÌM TOA CỦA HẠNG ĐÓ
+  for (const trip of trips) {
+    const carriageCondition = { train_trip_id: trip._id };
     if (filters.seat_class) {
       carriageCondition.type = filters.seat_class.toUpperCase();
     }
 
-    const carriages = await TrainCarriage.find(carriageCondition);
-
-    // Nếu mảng carriages có data, lấy giá min. Nếu không, gán bằng 0
-    t.starting_price =
+    const carriages = await TrainCarriage.find(carriageCondition).lean();
+    trip.starting_price =
       carriages.length > 0
-        ? Math.min(...carriages.map((c) => c.base_price))
+        ? Math.min(...carriages.map((carriage) => carriage.base_price))
         : 0;
   }
 
   const filter_counts = {
-    airlines: {}, // Tàu hỏa thì mình có thể gộp chung hoặc lấy mã tàu
+    airlines: {},
     departure_time: {
       morning: 0,
       noon: 0,
@@ -295,28 +294,36 @@ const findTrainTrips = async ({
   };
 
   trips.forEach((trip) => {
-    // Với tàu hỏa, mình tạm quy về mã 'SE' như bên Frontend bạn fix cứng, hoặc đếm theo tên
-    const trainCode = "SE"; // Hoặc trip.train_id?.name
+    const trainCode = trip.train_id?.train_number || trip.train_id?.name || "TRAIN";
     filter_counts.airlines[trainCode] =
       (filter_counts.airlines[trainCode] || 0) + 1;
 
-    // Đếm thời gian
     const hour = new Date(trip.departure_time).getHours();
     if (hour >= 0 && hour < 6) filter_counts.departure_time.morning += 1;
     else if (hour >= 6 && hour < 12) filter_counts.departure_time.noon += 1;
-    else if (hour >= 12 && hour < 18)
-      filter_counts.departure_time.afternoon += 1;
-    else if (hour >= 18 && hour <= 24)
-      filter_counts.departure_time.evening += 1;
+    else if (hour >= 12 && hour < 18) filter_counts.departure_time.afternoon += 1;
+    else if (hour >= 18 && hour <= 24) filter_counts.departure_time.evening += 1;
   });
 
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
+  let sortedTrips = [...trips];
+  if (sort === "price:asc") {
+    sortedTrips.sort((a, b) => (a.starting_price || 0) - (b.starting_price || 0));
+  } else if (sort === "price:desc") {
+    sortedTrips.sort((a, b) => (b.starting_price || 0) - (a.starting_price || 0));
+  } else {
+    sortedTrips.sort(
+      (a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime(),
+    );
+  }
+
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = clampLimit(limit, 20);
   return {
-    trips: trips.slice((pageNum - 1) * limitNum, pageNum * limitNum),
-    total: trips.length,
+    trips: sortedTrips.slice((pageNum - 1) * limitNum, pageNum * limitNum),
+    total: sortedTrips.length,
     page: pageNum,
     limit: limitNum,
+    filter_counts,
   };
 };
 
@@ -422,3 +429,4 @@ module.exports = {
   checkFlightAvailability,
   checkTrainAvailability,
 };
+
