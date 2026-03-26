@@ -30,7 +30,16 @@ const listTrainStations = async (req, res, next) => {
 
 const searchFlights = async (req, res, next) => {
   try {
-    const { origin, destination, departure_date, passengers, sort, page, limit, ...filters } = req.query;
+    const {
+      origin,
+      destination,
+      departure_date,
+      passengers,
+      sort,
+      page,
+      limit,
+      ...filters
+    } = req.query;
     const result = await searchService.findFlights({
       origin,
       destination,
@@ -59,8 +68,10 @@ const searchFlights = async (req, res, next) => {
           page: result.page,
           limit: result.limit,
           totalItems: result.total,
+
           totalPages: Math.ceil(result.total / result.limit) || 1,
         },
+        filter_counts: result.filter_counts || {},
       },
       message: "Flights found",
       errors: null,
@@ -72,7 +83,16 @@ const searchFlights = async (req, res, next) => {
 
 const searchTrainTrips = async (req, res, next) => {
   try {
-    const { origin, destination, departure_date, passengers, sort, page, limit, ...filters } = req.query;
+    const {
+      origin,
+      destination,
+      departure_date,
+      passengers,
+      sort,
+      page,
+      limit,
+      ...filters
+    } = req.query;
     const result = await searchService.findTrainTrips({
       origin,
       destination,
@@ -101,8 +121,10 @@ const searchTrainTrips = async (req, res, next) => {
           page: result.page,
           limit: result.limit,
           totalItems: result.total,
+
           totalPages: Math.ceil(result.total / result.limit) || 1,
         },
+        filter_counts: result.filter_counts || {},
       },
       message: "Train trips found",
       errors: null,
@@ -143,7 +165,10 @@ const getTrainTripById = async (req, res, next) => {
 const checkFlightSeats = async (req, res, next) => {
   try {
     const { seat_class } = req.query;
-    const availability = await searchService.checkFlightAvailability(req.params.id, seat_class);
+    const availability = await searchService.checkFlightAvailability(
+      req.params.id,
+      seat_class,
+    );
     res.status(200).json({
       success: true,
       data: availability,
@@ -158,7 +183,10 @@ const checkFlightSeats = async (req, res, next) => {
 const checkTrainSeats = async (req, res, next) => {
   try {
     const { seat_class } = req.query;
-    const availability = await searchService.checkTrainAvailability(req.params.id, seat_class);
+    const availability = await searchService.checkTrainAvailability(
+      req.params.id,
+      seat_class,
+    );
     res.status(200).json({
       success: true,
       data: availability,

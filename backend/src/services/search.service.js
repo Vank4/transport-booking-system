@@ -42,7 +42,10 @@ const listTrainStations = async ({ q = "", limit = 20 } = {}) => {
   const trimmed = q.trim();
   const query = trimmed
     ? {
-        $or: [{ city: new RegExp(trimmed, "i") }, { name: new RegExp(trimmed, "i") }],
+        $or: [
+          { city: new RegExp(trimmed, "i") },
+          { name: new RegExp(trimmed, "i") },
+        ],
       }
     : {};
 
@@ -91,7 +94,8 @@ const findFlights = async ({
     Airport.findOne({ iata_code: destination.toUpperCase() }),
   ]);
 
-  if (!originAirport || !destAirport) return { trips: [], total: 0, page, limit };
+  if (!originAirport || !destAirport)
+    return { trips: [], total: 0, page, limit };
 
   const query = {
     departure_airport_id: originAirport._id,
@@ -118,7 +122,9 @@ const findFlights = async ({
 
   query.departure_time = { $gte: startOfDay, $lte: endOfDay };
 
-  const seatClass = filters.seat_class ? filters.seat_class.toLowerCase() : "economy";
+  const seatClass = filters.seat_class
+    ? filters.seat_class.toLowerCase()
+    : "economy";
   const priceField = `prices.${seatClass}`;
 
   if (filters.min_price || filters.max_price) {
@@ -129,7 +135,9 @@ const findFlights = async ({
 
   if (filters.airlines) {
     const airlineCodes = filters.airlines.split(",");
-    const matchingAirlines = await Airline.find({ iata_code: { $in: airlineCodes } });
+    const matchingAirlines = await Airline.find({
+      iata_code: { $in: airlineCodes },
+    });
     query.airline_id = { $in: matchingAirlines.map((airline) => airline._id) };
   }
 
@@ -160,6 +168,33 @@ const findFlights = async ({
       });
     }
   }
+  const filter_counts = {
+    airlines: {},
+    departure_time: {
+      morning: 0, // 00:00 - 06:00
+      noon: 0, // 06:00 - 12:00
+      afternoon: 0, // 12:00 - 18:00
+      evening: 0, // 18:00 - 24:00
+    },
+  };
+
+  validFlights.forEach((flight) => {
+    // 1. Đếm Hãng bay
+    const airlineCode = flight.airline_id?.iata_code;
+    if (airlineCode) {
+      filter_counts.airlines[airlineCode] =
+        (filter_counts.airlines[airlineCode] || 0) + 1;
+    }
+
+    // 2. Đếm Thời gian
+    const hour = new Date(flight.departure_time).getHours();
+    if (hour >= 0 && hour < 6) filter_counts.departure_time.morning += 1;
+    else if (hour >= 6 && hour < 12) filter_counts.departure_time.noon += 1;
+    else if (hour >= 12 && hour < 18)
+      filter_counts.departure_time.afternoon += 1;
+    else if (hour >= 18 && hour <= 24)
+      filter_counts.departure_time.evening += 1;
+  });
 
   const pageNum = parseInt(page, 10);
   const limitNum = parseInt(limit, 10);
@@ -191,7 +226,8 @@ const findTrainTrips = async ({
     TrainStation.findOne({ name: destination }),
   ]);
 
-  if (!originStation || !destStation) return { trips: [], total: 0, page, limit };
+  if (!originStation || !destStation)
+    return { trips: [], total: 0, page, limit };
 
   let validTripIds = null;
   const carriageQuery = {};
@@ -199,12 +235,15 @@ const findTrainTrips = async ({
   if (filters.seat_class) carriageQuery.type = filters.seat_class.toUpperCase();
   if (filters.min_price || filters.max_price) {
     carriageQuery.base_price = {};
-    if (filters.min_price) carriageQuery.base_price.$gte = Number(filters.min_price);
-    if (filters.max_price) carriageQuery.base_price.$lte = Number(filters.max_price);
+    if (filters.min_price)
+      carriageQuery.base_price.$gte = Number(filters.min_price);
+    if (filters.max_price)
+      carriageQuery.base_price.$lte = Number(filters.max_price);
   }
 
   if (Object.keys(carriageQuery).length > 0) {
-    const carriages = await TrainCarriage.find(carriageQuery).select("train_trip_id");
+    const carriages =
+      await TrainCarriage.find(carriageQuery).select("train_trip_id");
     validTripIds = carriages.map((carriage) => carriage.train_trip_id);
     if (validTripIds.length === 0) return { trips: [], total: 0, page, limit };
   }
@@ -227,13 +266,49 @@ const findTrainTrips = async ({
     .populate("arrival_station_id", "name city")
     .lean();
 
-  for (const trip of trips) {
-    const carriageCondition = { train_trip_id: trip._id };
-    if (filters.seat_class) carriageCondition.type = filters.seat_class.toUpperCase();
+  // Gắn giá thấp nhất theo ĐÚNG HẠNG GHẾ để Frontend hiển thị và Sort
+  for (const t of trips) {
+    const carriageCondition = { train_trip_id: t._id };
+
+    // NẾU CÓ LỌC HẠNG GHẾ, CHỈ TÌM TOA CỦA HẠNG ĐÓ
+    if (filters.seat_class) {
+      carriageCondition.type = filters.seat_class.toUpperCase();
+    }
+
     const carriages = await TrainCarriage.find(carriageCondition);
-    trip.starting_price =
-      carriages.length > 0 ? Math.min(...carriages.map((carriage) => carriage.base_price)) : 0;
+
+    // Nếu mảng carriages có data, lấy giá min. Nếu không, gán bằng 0
+    t.starting_price =
+      carriages.length > 0
+        ? Math.min(...carriages.map((c) => c.base_price))
+        : 0;
   }
+
+  const filter_counts = {
+    airlines: {}, // Tàu hỏa thì mình có thể gộp chung hoặc lấy mã tàu
+    departure_time: {
+      morning: 0,
+      noon: 0,
+      afternoon: 0,
+      evening: 0,
+    },
+  };
+
+  trips.forEach((trip) => {
+    // Với tàu hỏa, mình tạm quy về mã 'SE' như bên Frontend bạn fix cứng, hoặc đếm theo tên
+    const trainCode = "SE"; // Hoặc trip.train_id?.name
+    filter_counts.airlines[trainCode] =
+      (filter_counts.airlines[trainCode] || 0) + 1;
+
+    // Đếm thời gian
+    const hour = new Date(trip.departure_time).getHours();
+    if (hour >= 0 && hour < 6) filter_counts.departure_time.morning += 1;
+    else if (hour >= 6 && hour < 12) filter_counts.departure_time.noon += 1;
+    else if (hour >= 12 && hour < 18)
+      filter_counts.departure_time.afternoon += 1;
+    else if (hour >= 18 && hour <= 24)
+      filter_counts.departure_time.evening += 1;
+  });
 
   const pageNum = parseInt(page, 10);
   const limitNum = parseInt(limit, 10);
@@ -340,8 +415,6 @@ const checkTrainAvailability = async (tripId, seatClass) => {
 };
 
 module.exports = {
-  listAirports,
-  listTrainStations,
   findFlights,
   findTrainTrips,
   getFlightDetails,
