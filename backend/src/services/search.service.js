@@ -2,6 +2,7 @@ const Flight = require("../models/flights.model");
 const Airport = require("../models/airports.model");
 const Airline = require("../models/airlines.model");
 const Seat = require("../models/seats.model");
+const FlightFare = require("../models/flightFares.model");
 const TrainTrip = require("../models/trainTrips.model");
 const TrainStation = require("../models/trainStations.model");
 const TrainCarriage = require("../models/trainCarriages.model");
@@ -82,8 +83,31 @@ const findFlights = async ({
   }
 
   const passengerCount = parseInt(passengers, 10) || 1;
+
+  // ─── BƯỚC 1: Lọc FlightFare theo hạng ghế + giá ───────────────────────────
+  const seatClass = filters.seat_class ? filters.seat_class.toLowerCase() : "economy";
+  const cabinClass = seatClass.toUpperCase(); // ECONOMY | BUSINESS | ...
+
+  let validFlightIds = null;
+  const fareQuery = { is_active: true, cabin_class: cabinClass };
+
+  if (filters.min_price || filters.max_price) {
+    fareQuery.base_price = {};
+    if (filters.min_price) fareQuery.base_price.$gte = Number(filters.min_price);
+    if (filters.max_price) fareQuery.base_price.$lte = Number(filters.max_price);
+  }
+
+  const matchingFares = await FlightFare.find(fareQuery).select("flight_id base_price promo_price");
+  validFlightIds = [...new Set(matchingFares.map((f) => f.flight_id.toString()))];
+
+  if (validFlightIds.length === 0) {
+    return { trips: [], total: 0, page, limit, filter_counts: {} };
+  }
+
+  // ─── BƯỚC 2: Build query Flight ────────────────────────────────────────────
   const query = {
     status: "SCHEDULED",
+    _id: { $in: validFlightIds },
   };
 
   if (origin) {
@@ -98,7 +122,7 @@ const findFlights = async ({
     query.arrival_airport_id = destAirport._id;
   }
 
-  // 🔥 Đã sửa lỗi UTC, chỉ tìm trong nguyên 1 ngày Local
+
   if (departureDate) {
     const startOfDay = new Date(departureDate);
     startOfDay.setHours(0, 0, 0, 0);
@@ -107,39 +131,35 @@ const findFlights = async ({
     query.departure_time = { $gte: startOfDay, $lte: endOfDay };
   }
 
-  const seatClass = filters.seat_class ? filters.seat_class.toLowerCase() : "economy";
-  const priceField = `prices.${seatClass}`;
-
-  if (filters.min_price || filters.max_price) {
-    query[priceField] = {};
-    if (filters.min_price) query[priceField].$gte = Number(filters.min_price);
-    if (filters.max_price) query[priceField].$lte = Number(filters.max_price);
-  }
-
   if (filters.airlines) {
     const airlineCodes = filters.airlines.split(",");
     const matchingAirlines = await Airline.find({ iata_code: { $in: airlineCodes } });
     query.airline_id = { $in: matchingAirlines.map((airline) => airline._id) };
   }
 
-  let sortCriteria = { departure_time: 1 };
-  if (sort === "price:asc") sortCriteria = { [priceField]: 1 };
-  if (sort === "price:desc") sortCriteria = { [priceField]: -1 };
-
   const flights = await Flight.find(query)
     .populate("airline_id", "name iata_code logo_url")
     .populate("departure_airport_id", "name iata_code city country")
     .populate("arrival_airport_id", "name iata_code city country")
-    .sort(sortCriteria)
+    .sort({ departure_time: 1 })
     .lean();
+
+  // ─── BƯỚC 3: Lọc ghế trống + khung giờ + tính giá từ FlightFare ──────────
+  const faresByFlightId = {};
+  matchingFares.forEach((f) => {
+    const fid = f.flight_id.toString();
+    if (!faresByFlightId[fid]) faresByFlightId[fid] = [];
+    faresByFlightId[fid].push(f);
+  });
 
   const validFlights = [];
   for (const flight of flights) {
-    // 🔥 LỌC KHUNG GIỜ BẰNG JAVASCRIPT (Khắc phục triệt để lệch múi giờ)
+ 
     let isTimeValid = true;
     if (filters.times) {
       const selectedTimes = filters.times.split(",");
-      const hour = new Date(flight.departure_time).getHours();
+      const vnTime = new Date(new Date(flight.departure_time).getTime() + 7 * 60 * 60 * 1000);
+      const hour = vnTime.getUTCHours();
 
       let matched = false;
       if (selectedTimes.includes('morning') && hour >= 0 && hour < 6) matched = true;
@@ -150,27 +170,30 @@ const findFlights = async ({
       isTimeValid = matched;
     }
 
+    if (!isTimeValid) continue;
+
     const availableSeats = await Seat.countDocuments({
       flight_id: flight._id,
       status: "AVAILABLE",
-      class: seatClass.toUpperCase(),
+      class: cabinClass,
     });
 
-    // Chỉ push nếu đủ ghế và ĐÚNG KHUNG GIỜ
-    if (availableSeats >= passengerCount && isTimeValid) {
-      const resolvedPrices = {
-        economy: flight.prices?.economy ?? 1500000,
-        business: flight.prices?.business ?? 3000000,
-      };
-      validFlights.push({
-        ...flight,
-        prices: resolvedPrices,
-        available_seats_count: availableSeats,
-        current_price: resolvedPrices[seatClass] ?? resolvedPrices.economy,
-      });
-    }
+    if (availableSeats < passengerCount) continue;
+
+    const flightFares = faresByFlightId[flight._id.toString()] || [];
+    const startingPrice = flightFares.length > 0
+      ? Math.min(...flightFares.map((f) => f.promo_price ?? f.base_price))
+      : 0;
+
+    validFlights.push({
+      ...flight,
+      available_seats_count: availableSeats,
+      starting_price: startingPrice,
+      current_price: startingPrice,
+    });
   }
 
+  // ─── BƯỚC 4: Filter counts + Sort ─────────────────────────────────────────
   const filter_counts = {
     airlines: {},
     departure_time: { morning: 0, noon: 0, afternoon: 0, evening: 0 },
@@ -181,18 +204,30 @@ const findFlights = async ({
     if (airlineCode) {
       filter_counts.airlines[airlineCode] = (filter_counts.airlines[airlineCode] || 0) + 1;
     }
-    const hour = new Date(flight.departure_time).getHours();
+    
+    const vnTime = new Date(new Date(flight.departure_time).getTime() + 7 * 60 * 60 * 1000);
+    const hour = vnTime.getUTCHours();
+    
     if (hour >= 0 && hour < 6) filter_counts.departure_time.morning += 1;
     else if (hour >= 6 && hour < 12) filter_counts.departure_time.noon += 1;
     else if (hour >= 12 && hour < 18) filter_counts.departure_time.afternoon += 1;
     else if (hour >= 18 && hour <= 24) filter_counts.departure_time.evening += 1;
   });
 
+  let sortedFlights = [...validFlights];
+  if (sort === "price:asc") {
+    sortedFlights.sort((a, b) => (a.starting_price || 0) - (b.starting_price || 0));
+  } else if (sort === "price:desc") {
+    sortedFlights.sort((a, b) => (b.starting_price || 0) - (a.starting_price || 0));
+  } else {
+    sortedFlights.sort((a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime());
+  }
+
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const limitNum = clampLimit(limit, 20);
   return {
-    trips: validFlights.slice((pageNum - 1) * limitNum, pageNum * limitNum),
-    total: validFlights.length,
+    trips: sortedFlights.slice((pageNum - 1) * limitNum, pageNum * limitNum),
+    total: sortedFlights.length,
     page: pageNum,
     limit: limitNum,
     filter_counts,
@@ -261,7 +296,9 @@ const findTrainTrips = async ({
     let isTimeValid = true;
     if (filters.times) {
       const selectedTimes = filters.times.split(",");
-      const hour = new Date(trip.departure_time).getHours();
+     
+      const vnTime = new Date(new Date(trip.departure_time).getTime() + 7 * 60 * 60 * 1000);
+      const hour = vnTime.getUTCHours();
 
       let matched = false;
       if (selectedTimes.includes('morning') && hour >= 0 && hour < 6) matched = true;
@@ -294,7 +331,10 @@ const findTrainTrips = async ({
     const trainCode = trip.train_id?.train_number || trip.train_id?.name || "TRAIN";
     filter_counts.airlines[trainCode] = (filter_counts.airlines[trainCode] || 0) + 1;
 
-    const hour = new Date(trip.departure_time).getHours();
+    // 🔥 Đã fix timezone cho vòng đếm của tàu hỏa
+    const vnTime = new Date(new Date(trip.departure_time).getTime() + 7 * 60 * 60 * 1000);
+    const hour = vnTime.getUTCHours();
+
     if (hour >= 0 && hour < 6) filter_counts.departure_time.morning += 1;
     else if (hour >= 6 && hour < 12) filter_counts.departure_time.noon += 1;
     else if (hour >= 12 && hour < 18) filter_counts.departure_time.afternoon += 1;
@@ -342,6 +382,12 @@ const getFlightDetails = async (flightId) => {
     throw error;
   }
 
+  // Lấy danh sách hạng vé từ FlightFare
+  const fares = await FlightFare.find({ flight_id: flightId, is_active: true })
+    .select("cabin_class fare_name base_price promo_price baggage_kg carry_on_kg is_refundable change_fee available_seats")
+    .sort({ base_price: 1 })
+    .lean();
+
   const availableEconomy = await Seat.countDocuments({
     flight_id: flightId,
     class: "ECONOMY",
@@ -355,6 +401,7 @@ const getFlightDetails = async (flightId) => {
 
   return {
     ...flight,
+    fares,
     available_seats: { economy: availableEconomy, business: availableBusiness },
   };
 };
@@ -381,7 +428,24 @@ const getTrainTripDetails = async (tripId) => {
   }
 
   const carriages = await TrainCarriage.find({ train_trip_id: tripId }).lean();
-  return { ...trip, carriages_info: carriages };
+
+  
+  const pricesObj = {};
+  carriages.forEach((carriage) => {
+    if (carriage.type && carriage.base_price) {
+      const cls = carriage.type.toLowerCase(); // VD: 'economy', 'business'
+      // Nếu có nhiều toa cùng hạng, lấy toa có giá thấp nhất
+      if (!pricesObj[cls] || carriage.base_price < pricesObj[cls]) {
+        pricesObj[cls] = carriage.base_price;
+      }
+    }
+  });
+
+  return { 
+    ...trip, 
+    carriages_info: carriages,
+    prices: pricesObj // Đính kèm cục giá này vào là Frontend tự nhận diện được ngay!
+  };
 };
 
 const checkFlightAvailability = async (flightId, seatClass) => {
