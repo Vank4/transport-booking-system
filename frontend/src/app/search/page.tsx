@@ -15,6 +15,9 @@ import {
   Train,
 } from "lucide-react";
 import config from "@/config";
+import AppSidebar from "@/components/layout/AppSidebar";
+import api from "@/lib/api";
+import { buildLoginRedirect, isAuthenticated } from "@/lib/auth";
 
 type SearchType = "flight" | "train";
 
@@ -63,6 +66,10 @@ type SearchTrip = {
   available_seats_count?: number;
 };
 
+type BackendProfile = {
+  avatar_url?: string;
+};
+
 const DEFAULT_LIMIT = 10;
 const DEFAULT_EMPTY_MESSAGE = "Không tìm thấy chuyến đi phù hợp.";
 const SEARCH_HERO_BY_TYPE = {
@@ -94,6 +101,10 @@ const timeRanges = [
   { id: "afternoon", label: "12:00 - 18:00", from: "12:00", to: "17:59" },
   { id: "evening", label: "18:00 - 24:00", from: "18:00", to: "23:59" },
 ] as const;
+
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
 
 function formatCurrency(value: number) {
   return `${value.toLocaleString("vi-VN")} VND`;
@@ -200,6 +211,7 @@ function SearchResults() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const loggedIn = isAuthenticated();
 
   const type = (searchParams.get("type") as SearchType) || "flight";
   const origin = searchParams.get("origin") || "";
@@ -218,6 +230,10 @@ function SearchResults() {
   const [searchPassengers, setSearchPassengers] = useState(passengers);
   const [searchSeatClass, setSearchSeatClass] = useState(seatClass);
   const [tripKind, setTripKind] = useState<"one_way" | "round_trip">("one_way");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userAvatar, setUserAvatar] = useState(
+    "/images/icons/icons8-user-male-64.png",
+  );
   const searchHeroTheme = SEARCH_HERO_BY_TYPE[searchType];
 
   const [results, setResults] = useState<SearchTrip[]>([]);
@@ -283,6 +299,29 @@ function SearchResults() {
       return array.findIndex((candidate) => candidate.code === item.code) === index;
     });
   }, [locationOptions, searchDest, searchOrigin]);
+
+  const sidebarSearchHref = useMemo(() => {
+    const params = new URLSearchParams({ type: searchType });
+    if (searchOrigin) params.set("origin", searchOrigin);
+    if (searchDest) params.set("destination", searchDest);
+    if (searchDate) params.set("departure_date", searchDate);
+    if (tripKind === "round_trip" && returnDate) {
+      params.set("return_date", returnDate);
+    }
+    if (searchPassengers) params.set("passengers", searchPassengers);
+    if (searchSeatClass) params.set("seat_class", searchSeatClass);
+    params.set("page", "1");
+    return `/search?${params.toString()}`;
+  }, [
+    returnDate,
+    searchDate,
+    searchDest,
+    searchOrigin,
+    searchPassengers,
+    searchSeatClass,
+    searchType,
+    tripKind,
+  ]);
 
   const originDisplayLabel =
     locationList.find((item) => item.code === origin)?.label || origin || "--";
@@ -394,6 +433,35 @@ function SearchResults() {
   }, [departureDate, destination, origin, passengers, searchParams, seatClass, type]);
 
   useEffect(() => {
+    if (!loggedIn) {
+      setUserAvatar("/images/icons/icons8-user-male-64.png");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadProfileAvatar = async () => {
+      try {
+        const { data } = await api.get<{ data?: BackendProfile }>("/auth/profile");
+        if (cancelled) return;
+        setUserAvatar(
+          data?.data?.avatar_url?.trim() ||
+            "/images/icons/icons8-user-male-64.png",
+        );
+      } catch {
+        if (cancelled) return;
+        setUserAvatar("/images/icons/icons8-user-male-64.png");
+      }
+    };
+
+    loadProfileAvatar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ limit: "30" });
 
@@ -475,9 +543,113 @@ function SearchResults() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [departureDate, destination, endpointBase, origin, searchParams]);
 
+  const navigateToProtectedPage = (targetPath: string) => {
+    if (!isAuthenticated()) {
+      router.push(buildLoginRedirect(targetPath));
+      return;
+    }
+
+    router.push(targetPath);
+  };
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fbff_0%,#edf4fb_38%,#e8eef6_100%)] pb-10 pt-0 text-slate-900">
-      <div className="mx-auto max-w-[1140px] px-4 md:px-5">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fbff_0%,#edf4fb_38%,#e8eef6_100%)] pb-10 pt-3 text-slate-900 md:px-6 lg:px-10">
+      <AppSidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        searchHref={sidebarSearchHref}
+      />
+      <div className="mx-auto max-w-[1140px] px-4 md:px-0">
+        <div className="mb-5 rounded-[22px] border border-white/35 bg-white/32 px-4 py-1.5 shadow-[0_18px_60px_rgba(15,23,42,0.14)] backdrop-blur-md transition duration-300">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3 md:gap-5">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/75 shadow-sm md:h-9 md:w-9"
+              >
+                <Image
+                  src="/images/icons/icons8-features-list-64.png"
+                  alt="Menu icon"
+                  width={20}
+                  height={20}
+                  className="h-[1.125rem] w-[1.125rem] object-contain md:h-5 md:w-5"
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateToProtectedPage("/user/profile")}
+                className={cn(
+                  "flex min-w-0 items-center",
+                  loggedIn ? "gap-3 md:gap-4" : "gap-0",
+                )}
+                aria-label="Mo trang ho so"
+              >
+                <Image
+                  src={userAvatar}
+                  alt="User avatar"
+                  width={24}
+                  height={24}
+                  className={cn(
+                    "shrink-0 rounded-full border border-white/50 bg-white/85 object-cover",
+                    loggedIn ? "h-5 w-5 md:h-6 md:w-6" : "hidden",
+                  )}
+                />
+                <span className="truncate font-serif text-base text-slate-950 md:text-[1.65rem]">
+                  Transport Booking
+                </span>
+                <Image
+                  src={
+                    searchType === "flight"
+                      ? "/images/icons/icons8-airplane-take-off-50.png"
+                      : "/images/icons/icons8-train-100.png"
+                  }
+                  alt={searchType === "flight" ? "Flight" : "Train"}
+                  width={28}
+                  height={28}
+                  className="hidden h-6 w-6 shrink-0 object-contain md:block"
+                />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                handleTypeChange(searchType === "flight" ? "train" : "flight")
+              }
+              className="group relative h-[56px] w-[114px] shrink-0 overflow-hidden rounded-bl-[22px] rounded-tr-[22px] shadow-[0_18px_40px_rgba(15,23,42,0.22)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(15,23,42,0.28)] md:h-[64px] md:w-[124px]"
+            >
+              <Image
+                src={
+                  searchType === "flight"
+                    ? "/images/background/backgroundTrain.jpg"
+                    : "/images/background/backgroundFlight.jpg"
+                }
+                alt=""
+                fill
+                className="object-cover transition duration-500 group-hover:scale-[1.06]"
+              />
+              <div className="absolute inset-0 bg-gradient-to-l from-black/10 via-transparent to-black/30" />
+              <span className="absolute left-3 top-2 max-w-[60px] text-left text-[9px] font-medium leading-3 text-black md:left-3 md:top-2.5 md:max-w-[68px] md:text-[10px] md:leading-3.5">
+                {searchType === "flight"
+                  ? "Dat ve tau o day"
+                  : "Dat ve may bay o day"}
+              </span>
+              <Image
+                src={
+                  searchType === "flight"
+                    ? "/images/icons/iconTrain.png"
+                    : "/images/icons/iconFlight.png"
+                }
+                alt=""
+                width={72}
+                height={72}
+                className="absolute bottom-0 right-0 h-[46px] w-[62px] object-contain transition duration-500 group-hover:translate-x-1 group-hover:scale-[1.05] md:h-[54px] md:w-[72px]"
+              />
+            </button>
+          </div>
+        </div>
+
         <section className="relative overflow-hidden rounded-[28px] border border-slate-200 shadow-[0_20px_48px_rgba(15,23,42,0.08)]">
           <Image
             src={searchHeroTheme.heroBg}
@@ -523,9 +695,7 @@ function SearchResults() {
                     className={`flex min-h-[2.35rem] items-center gap-1.5 rounded-full border px-3 text-left text-[0.8rem] font-semibold transition ${
                       searchType === "flight"
                         ? `${searchHeroTheme.accentBorder} ${searchHeroTheme.accentSurface} ${searchHeroTheme.accentText}`
-                        : searchType === "train"
-                          ? "border-slate-200 bg-white text-slate-800 hover:border-orange-200"
-                          : "border-slate-200 bg-white text-slate-800 hover:border-sky-200"
+                        : "border-slate-200 bg-white text-slate-800 hover:border-orange-200"
                     }`}
                   >
                     <Image
@@ -543,9 +713,7 @@ function SearchResults() {
                     className={`flex min-h-[2.35rem] items-center gap-1.5 rounded-full border px-3 text-left text-[0.8rem] font-semibold transition ${
                       searchType === "train"
                         ? `${searchHeroTheme.accentBorder} ${searchHeroTheme.accentSurface} ${searchHeroTheme.accentText}`
-                        : searchType === "train"
-                          ? "border-slate-200 bg-white text-slate-800 hover:border-orange-200"
-                          : "border-slate-200 bg-white text-slate-800 hover:border-sky-200"
+                        : "border-slate-200 bg-white text-slate-800 hover:border-sky-200"
                     }`}
                   >
                     <Image
@@ -757,7 +925,13 @@ function SearchResults() {
                       </span>
                     )}
                   </div>
-                  <div className="mt-3 space-y-3">
+                  <div
+                    className={`mt-3 space-y-3 ${
+                      type === "train"
+                        ? "max-h-[26rem] overflow-y-auto pr-1"
+                        : ""
+                    }`}
+                  >
                     {carrierOptions.length === 0 && (
                       <div className="rounded-[16px] border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-400">
                         {"Chưa có dữ liệu bộ lọc."}
@@ -906,11 +1080,22 @@ function SearchResults() {
                     const carrierCode = getCarrierCode(type, trip);
                     const tripOrigin = getOriginLabel(type, trip, origin);
                     const tripDestination = getDestinationLabel(type, trip, destination);
+                    const detailHref =
+                      type === "flight" ? `/flights/${trip._id}` : `/train-trips/${trip._id}`;
 
                     return (
                       <article
                         key={trip._id}
-                        className="rounded-[24px] border border-slate-200/90 bg-white/95 p-6 shadow-[0_16px_36px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-sky-300"
+                        role="link"
+                        tabIndex={0}
+                        onClick={() => router.push(detailHref)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            router.push(detailHref);
+                          }
+                        }}
+                        className="cursor-pointer rounded-[24px] border border-slate-200/90 bg-white/95 p-6 shadow-[0_16px_36px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2"
                       >
                         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                           <div className="flex min-w-0 flex-1 items-start gap-3.5">
@@ -969,7 +1154,8 @@ function SearchResults() {
                             </div>
 
                             <Link
-                              href={type === "flight" ? `/flights/${trip._id}` : `/train-trips/${trip._id}`}
+                              href={detailHref}
+                              onClick={(event) => event.stopPropagation()}
                               className="inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,#88dbff_0%,#32afff_100%)] px-5 py-2 text-[0.92rem] font-black text-slate-950 shadow-[0_12px_24px_rgba(50,175,255,0.20)] transition hover:-translate-y-0.5"
                             >
                               {"Chọn chuyến"}

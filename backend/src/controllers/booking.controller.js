@@ -1,4 +1,4 @@
-const Booking = require("../models/bookings.model");
+﻿const Booking = require("../models/bookings.model");
 const Payment = require("../models/payments.model");
 const Seat = require("../models/seats.model");
 const Ticket = require("../models/tickets.model");
@@ -80,30 +80,44 @@ const getAuthFailureMessage = (req) =>
   req.authError || "Vui long dang nhap de truy cap booking nay!";
 
 
-// Táº¡o booking má»›i
+// TĂ¡ÂºÂ¡o booking mĂ¡Â»â€ºi
 exports.createBooking = async (req, res) => {
   try {
     const { trip_id, booking_type, seats, passengers } = req.body;
     const user_id = getRequestUserId(req);
 
-    // 1. Kiá»ƒm tra tráº¡ng thÃ¡i hÃ ng gháº¿
+    // 1. KiĂ¡Â»Æ’m tra trĂ¡ÂºÂ¡ng thĂƒÂ¡i hĂƒÂ ng ghĂ¡ÂºÂ¿
     const seatDocs = await Seat.find({ _id: { $in: seats } });
     if (seatDocs.length !== seats.length) {
-      return res.status(400).json({ message: 'Má»™t hoáº·c nhiá»u mÃ£ gháº¿ khÃ´ng tá»“n táº¡i.' });
+      return res.status(400).json({ message: 'MĂ¡Â»â„¢t hoĂ¡ÂºÂ·c nhiĂ¡Â»Âu mĂƒÂ£ ghĂ¡ÂºÂ¿ khĂƒÂ´ng tĂ¡Â»â€œn tĂ¡ÂºÂ¡i.' });
     }
 
     let total_amount = 0;
 
-    // Map Ä‘á»ƒ tra cá»©u giÃ¡ tá»«ng gháº¿ nhanh hÆ¡n (seat_id \u2192 final_price)
+    // Map Ă„â€˜Ă¡Â»Æ’ tra cĂ¡Â»Â©u giĂƒÂ¡ tĂ¡Â»Â«ng ghĂ¡ÂºÂ¿ nhanh hĂ†Â¡n (seat_id \u2192 final_price)
     const seatPriceMap = {};
+    const now = new Date();
 
     for (let seat of seatDocs) {
-      if (seat.status === 'BOOKED' || seat.status === 'HELD') {
-        return res.status(400).json({ message: `Gháº¿ ${seat.seat_number} Ä‘Ã£ cÃ³ ngÆ°á»i Ä‘áº·t hoáº·c Ä‘ang giá»¯.` });
+      if (seat.status === 'BOOKED') {
+        return res.status(400).json({ message: `GhĂ¡ÂºÂ¿ ${seat.seat_number} Ă„â€˜ĂƒÂ£ cĂƒÂ³ ngĂ†Â°Ă¡Â»Âi Ă„â€˜Ă¡ÂºÂ·t hoĂ¡ÂºÂ·c Ă„â€˜ang giĂ¡Â»Â¯.` });
       }
 
-      // 2. Query báº£ng giÃ¡ tá»« FlightFare theo chuyáº¿n bay + háº¡ng gháº¿
-      // Chá»‰ Ã¡p dá»¥ng cho FLIGHT; TRAIN dÃ¹ng base_price cá»§a TrainCarriage
+      if (seat.status === 'HELD') {
+        const heldBySameUser =
+          user_id &&
+          seat.held_by &&
+          seat.held_by.toString() === user_id.toString();
+        const holdStillValid =
+          seat.hold_expired_at && new Date(seat.hold_expired_at) > now;
+
+        if (!heldBySameUser || !holdStillValid) {
+          return res.status(400).json({ message: `GhĂ¡ÂºÂ¿ ${seat.seat_number} Ă„â€˜ĂƒÂ£ cĂƒÂ³ ngĂ†Â°Ă¡Â»Âi Ă„â€˜Ă¡ÂºÂ·t hoĂ¡ÂºÂ·c Ă„â€˜ang giĂ¡Â»Â¯.` });
+        }
+      }
+
+      // 2. Query bĂ¡ÂºÂ£ng giĂƒÂ¡ tĂ¡Â»Â« FlightFare theo chuyĂ¡ÂºÂ¿n bay + hĂ¡ÂºÂ¡ng ghĂ¡ÂºÂ¿
+      // ChĂ¡Â»â€° ĂƒÂ¡p dĂ¡Â»Â¥ng cho FLIGHT; TRAIN dĂƒÂ¹ng base_price cĂ¡Â»Â§a TrainCarriage
       let seatPrice = 0;
 
       if (booking_type === 'FLIGHT') {
@@ -113,15 +127,25 @@ exports.createBooking = async (req, res) => {
           is_active: true,
         });
 
-        if (!fare) {
-          return res.status(400).json({
-            message: `KhÃ´ng tÃ¬m tháº¥y báº£ng giÃ¡ cho háº¡ng ${seat.class} trÃªn chuyáº¿n bay nÃ y. Vui lÃ²ng liÃªn há»‡ quáº£n trá»‹ viÃªn.`,
-          });
-        }
+        if (fare) {
+          // Ă†Â¯u tiĂƒÂªn giĂƒÂ¡ khuyĂ¡ÂºÂ¿n mĂƒÂ£i, nĂ¡ÂºÂ¿u khĂƒÂ´ng cĂƒÂ³ thĂƒÂ¬ dĂƒÂ¹ng giĂƒÂ¡ gĂ¡Â»â€˜c
+          const effectivePrice = fare.promo_price != null ? fare.promo_price : fare.base_price;
+          seatPrice = effectivePrice + (seat.price_modifier || 0);
+        } else {
+          const flight = await Flight.findById(trip_id).lean();
+          const normalizedClass = String(seat.class || '').toLowerCase();
+          const fallbackPrice =
+            flight?.prices?.[normalizedClass] ??
+            flight?.prices?.economy;
 
-        // Æ¯u tiÃªn giÃ¡ khuyáº¿n mÃ£i, náº¿u khÃ´ng cÃ³ thÃ¬ dÃ¹ng giÃ¡ gá»‘c
-        const effectivePrice = fare.promo_price != null ? fare.promo_price : fare.base_price;
-        seatPrice = effectivePrice + (seat.price_modifier || 0);
+          if (fallbackPrice == null) {
+            return res.status(400).json({
+              message: `KhĂƒÂ´ng tĂƒÂ¬m thĂ¡ÂºÂ¥y bĂ¡ÂºÂ£ng giĂƒÂ¡ cho hĂ¡ÂºÂ¡ng ${seat.class} trĂƒÂªn chuyĂ¡ÂºÂ¿n bay nĂƒÂ y. Vui lĂƒÂ²ng liĂƒÂªn hĂ¡Â»â€¡ quĂ¡ÂºÂ£n trĂ¡Â»â€¹ viĂƒÂªn.`,
+            });
+          }
+
+          seatPrice = fallbackPrice + (seat.price_modifier || 0);
+        }
       } else {
         // TRAIN
         seatPrice = seat.price_modifier || 0;
@@ -131,7 +155,7 @@ exports.createBooking = async (req, res) => {
       total_amount += seatPrice;
     }
 
-    // 3. Táº¡o Booking
+    // 3. TĂ¡ÂºÂ¡o Booking
     const newBooking = new Booking({
       user_id: user_id,
       booking_code: "BKG" + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000),
@@ -144,7 +168,7 @@ exports.createBooking = async (req, res) => {
 
     await newBooking.save();
 
-    // 4. Táº¡o Ticket vá»›i final_price Ä‘Ãºng tá»« báº£ng giÃ¡ Tra cá»©u Ä‘Æ°á»£c
+    // 4. TĂ¡ÂºÂ¡o Ticket vĂ¡Â»â€ºi final_price Ă„â€˜ĂƒÂºng tĂ¡Â»Â« bĂ¡ÂºÂ£ng giĂƒÂ¡ Tra cĂ¡Â»Â©u Ă„â€˜Ă†Â°Ă¡Â»Â£c
     const ticketPromises = passengers.map(async (p) => {
       const finalPrice = seatPriceMap[p.seat_id.toString()] || 0;
 
@@ -159,7 +183,7 @@ exports.createBooking = async (req, res) => {
 
     await Promise.all(ticketPromises);
 
-    // 5. KhoÃ¡ gháº¿ Ä‘á»ƒ ngÄƒn ngÆ°á»i khÃ¡c Ä‘áº·t trÃ¹ng
+    // 5. KhoĂƒÂ¡ ghĂ¡ÂºÂ¿ Ă„â€˜Ă¡Â»Æ’ ngĂ„Æ’n ngĂ†Â°Ă¡Â»Âi khĂƒÂ¡c Ă„â€˜Ă¡ÂºÂ·t trĂƒÂ¹ng
     await Seat.updateMany(
       { _id: { $in: seats } },
       { $set: { status: 'HELD', held_by_booking_id: newBooking._id } }
@@ -175,19 +199,19 @@ exports.createBooking = async (req, res) => {
   }
 };
 
-// Xá»­ lÃ½ thanh toÃ¡n
+// XĂ¡Â»Â­ lĂƒÂ½ thanh toĂƒÂ¡n
 exports.processPayment = async (req, res) => {
   try {
     const { booking_id, method, transaction_id, amount, status } = req.body;
     const requestUserId = getRequestUserId(req);
 
-    // kiá»ƒm tra booking tá»“n táº¡i
+    // kiĂ¡Â»Æ’m tra booking tĂ¡Â»â€œn tĂ¡ÂºÂ¡i
     const booking = await Booking.findById(booking_id);
     if (!booking) {
       return res.status(404).json({ message: "Booking not found!" });
     }
 
-    // kiá»ƒm tra booking thuá»™c user
+    // kiĂ¡Â»Æ’m tra booking thuĂ¡Â»â„¢c user
     if (booking.user_id && !requestUserId) {
       return res.status(401).json({
         message: getAuthFailureMessage(req),
@@ -211,7 +235,7 @@ exports.processPayment = async (req, res) => {
 
     await payment.save();
 
-    // cáº­p nháº­t tráº¡ng thÃ¡i booking náº¿u thanh toÃ¡n thÃ nh cÃ´ng
+    // cĂ¡ÂºÂ­p nhĂ¡ÂºÂ­t trĂ¡ÂºÂ¡ng thĂƒÂ¡i booking nĂ¡ÂºÂ¿u thanh toĂƒÂ¡n thĂƒÂ nh cĂƒÂ´ng
     if (status === "SUCCESS") {
       booking.status = "CONFIRMED";
       await booking.save();
@@ -227,7 +251,7 @@ exports.processPayment = async (req, res) => {
   }
 };
 
-// Láº¥y táº¥t cáº£ booking cá»§a user Ä‘ang Ä‘Äƒng nháº­p
+// LĂ¡ÂºÂ¥y tĂ¡ÂºÂ¥t cĂ¡ÂºÂ£ booking cĂ¡Â»Â§a user Ă„â€˜ang Ă„â€˜Ă„Æ’ng nhĂ¡ÂºÂ­p
 exports.getAllBookings = async (req, res) => {
   try {
     const requestUserId = getRequestUserId(req);
@@ -260,76 +284,76 @@ exports.getAllBookings = async (req, res) => {
     res.status(500).json({ message: "Internal server error!" });
   }
 };
-// Ãp dá»¥ng Voucher vÃ o Booking
+// ĂƒÂp dĂ¡Â»Â¥ng Voucher vĂƒÂ o Booking
 exports.applyVoucher = async (req, res) => {
   try {
     const { booking_id, voucher_code } = req.body;
 
-    // KAN-209: Kiá»ƒm tra Ä‘áº§u vÃ o tá»“n táº¡i vÃ  tÃ¬m Booking
+    // KAN-209: KiĂ¡Â»Æ’m tra Ă„â€˜Ă¡ÂºÂ§u vĂƒÂ o tĂ¡Â»â€œn tĂ¡ÂºÂ¡i vĂƒÂ  tĂƒÂ¬m Booking
     if (!booking_id || !voucher_code) {
-      return res.status(400).json({ success: false, message: "Thiáº¿u mÃ£ Booking hoáº·c MÃ£ giáº£m giÃ¡!" });
+      return res.status(400).json({ success: false, message: "ThiĂ¡ÂºÂ¿u mĂƒÂ£ Booking hoĂ¡ÂºÂ·c MĂƒÂ£ giĂ¡ÂºÂ£m giĂƒÂ¡!" });
     }
 
     const Booking = require("../models/bookings.model");
     const booking = await Booking.findById(booking_id);
     if (!booking) {
-      return res.status(404).json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin chuyáº¿n Ä‘i (Booking)!" });
+      return res.status(404).json({ success: false, message: "KhĂƒÂ´ng tĂƒÂ¬m thĂ¡ÂºÂ¥y thĂƒÂ´ng tin chuyĂ¡ÂºÂ¿n Ă„â€˜i (Booking)!" });
     }
 
-    // CHECK Náº¾U ÄÃƒ ÃP Dá»¤NG VOUCHER Rá»’I
+    // CHECK NĂ¡ÂºÂ¾U Ă„ÂĂƒÆ’ ĂƒÂP DĂ¡Â»Â¤NG VOUCHER RĂ¡Â»â€™I
     if (booking.voucher_applied) {
-      return res.status(400).json({ success: false, message: "Booking nÃ y Ä‘Ã£ Ä‘Æ°á»£c Ã¡p dá»¥ng mÃ£ giáº£m giÃ¡. KhÃ´ng thá»ƒ Ã¡p dá»¥ng thÃªm!" });
+      return res.status(400).json({ success: false, message: "Booking nĂƒÂ y Ă„â€˜ĂƒÂ£ Ă„â€˜Ă†Â°Ă¡Â»Â£c ĂƒÂ¡p dĂ¡Â»Â¥ng mĂƒÂ£ giĂ¡ÂºÂ£m giĂƒÂ¡. KhĂƒÂ´ng thĂ¡Â»Æ’ ĂƒÂ¡p dĂ¡Â»Â¥ng thĂƒÂªm!" });
     }
 
-    // TÆ°á»ng lá»­a chá»‘ng láº¥y trá»™m / sá»­a Booking ngÆ°á»i khÃ¡c
+    // TĂ†Â°Ă¡Â»Âng lĂ¡Â»Â­a chĂ¡Â»â€˜ng lĂ¡ÂºÂ¥y trĂ¡Â»â„¢m / sĂ¡Â»Â­a Booking ngĂ†Â°Ă¡Â»Âi khĂƒÂ¡c
     const requestUserId = getRequestUserId(req);
     if (booking.user_id && !requestUserId) {
       return res.status(401).json({ success: false, message: getAuthFailureMessage(req) });
     }
     if (booking.user_id && booking.user_id.toString() !== requestUserId) {
-      return res.status(403).json({ success: false, message: "Báº¡n khÃ´ng cÃ³ quyá»n sá»­a Ä‘á»•i Booking nÃ y!" });
+      return res.status(403).json({ success: false, message: "BĂ¡ÂºÂ¡n khĂƒÂ´ng cĂƒÂ³ quyĂ¡Â»Ân sĂ¡Â»Â­a Ă„â€˜Ă¡Â»â€¢i Booking nĂƒÂ y!" });
     }
 
-    // Cháº·n Ã¡p dá»¥ng lÃªn Booking Ä‘Ã£ ná»™p tiá»n
+    // ChĂ¡ÂºÂ·n ĂƒÂ¡p dĂ¡Â»Â¥ng lĂƒÂªn Booking Ă„â€˜ĂƒÂ£ nĂ¡Â»â„¢p tiĂ¡Â»Ân
     if (booking.status !== "WAITING_PAYMENT" && booking.status !== "PENDING") {
-      return res.status(400).json({ success: false, message: "Booking Ä‘Ã£ háº¿t háº¡n, Ä‘Ã£ há»§y hoáº·c Ä‘Ã£ hoÃ n táº¥t thanh toÃ¡n!" });
+      return res.status(400).json({ success: false, message: "Booking Ă„â€˜ĂƒÂ£ hĂ¡ÂºÂ¿t hĂ¡ÂºÂ¡n, Ă„â€˜ĂƒÂ£ hĂ¡Â»Â§y hoĂ¡ÂºÂ·c Ă„â€˜ĂƒÂ£ hoĂƒÂ n tĂ¡ÂºÂ¥t thanh toĂƒÂ¡n!" });
     }
 
-    // KAN-209 & KAN-210: Kiá»ƒm tra Ä‘iá»u kiá»‡n kháº¯c nghiá»‡t cá»§a Voucher
+    // KAN-209 & KAN-210: KiĂ¡Â»Æ’m tra Ă„â€˜iĂ¡Â»Âu kiĂ¡Â»â€¡n khĂ¡ÂºÂ¯c nghiĂ¡Â»â€¡t cĂ¡Â»Â§a Voucher
     const voucher = await Voucher.findOne({ code: voucher_code.toUpperCase() });
 
     if (!voucher) {
-      return res.status(404).json({ success: false, message: "MÃ£ giáº£m giÃ¡ khÃ´ng tá»“n táº¡i!" });
+      return res.status(404).json({ success: false, message: "MĂƒÂ£ giĂ¡ÂºÂ£m giĂƒÂ¡ khĂƒÂ´ng tĂ¡Â»â€œn tĂ¡ÂºÂ¡i!" });
     }
 
     if (!voucher.is_active || voucher.used_count >= voucher.usage_limit) {
-      return res.status(400).json({ success: false, message: "MÃ£ giáº£m giÃ¡ Ä‘Ã£ háº¿t lÆ°á»£t sá»­ dá»¥ng hoáº·c bá»‹ vÃ´ hiá»‡u hÃ³a!" });
+      return res.status(400).json({ success: false, message: "MĂƒÂ£ giĂ¡ÂºÂ£m giĂƒÂ¡ Ă„â€˜ĂƒÂ£ hĂ¡ÂºÂ¿t lĂ†Â°Ă¡Â»Â£t sĂ¡Â»Â­ dĂ¡Â»Â¥ng hoĂ¡ÂºÂ·c bĂ¡Â»â€¹ vĂƒÂ´ hiĂ¡Â»â€¡u hĂƒÂ³a!" });
     }
 
     const now = new Date();
     if (now > voucher.expiry_date) {
-      return res.status(400).json({ success: false, message: "MÃ£ giáº£m giÃ¡ Ä‘Ã£ háº¿t háº¡n sá»­ dá»¥ng!" });
+      return res.status(400).json({ success: false, message: "MĂƒÂ£ giĂ¡ÂºÂ£m giĂƒÂ¡ Ă„â€˜ĂƒÂ£ hĂ¡ÂºÂ¿t hĂ¡ÂºÂ¡n sĂ¡Â»Â­ dĂ¡Â»Â¥ng!" });
     }
 
     if (booking.total_amount < voucher.min_order_value) {
-      return res.status(400).json({ success: false, message: `MÃ£ giáº£m giÃ¡ chá»‰ Ã¡p dá»¥ng cho Ä‘Æ¡n hÃ ng tá»« ${voucher.min_order_value.toLocaleString()} VND!` });
+      return res.status(400).json({ success: false, message: `MĂƒÂ£ giĂ¡ÂºÂ£m giĂƒÂ¡ chĂ¡Â»â€° ĂƒÂ¡p dĂ¡Â»Â¥ng cho Ă„â€˜Ă†Â¡n hĂƒÂ ng tĂ¡Â»Â« ${voucher.min_order_value.toLocaleString()} VND!` });
     }
 
-    // KAN-211: TÃ­nh toÃ¡n sá»‘ tiá»n Ä‘Æ°á»£c giáº£m giÃ¡
+    // KAN-211: TĂƒÂ­nh toĂƒÂ¡n sĂ¡Â»â€˜ tiĂ¡Â»Ân Ă„â€˜Ă†Â°Ă¡Â»Â£c giĂ¡ÂºÂ£m giĂƒÂ¡
     let discount_amount = 0;
     if (voucher.discount_type === "PERCENTAGE") {
-      // TÃ­nh theo %
+      // TĂƒÂ­nh theo %
       discount_amount = (booking.total_amount * voucher.discount_value) / 100;
-      // Ãp tráº§n tá»‘i Ä‘a
+      // ĂƒÂp trĂ¡ÂºÂ§n tĂ¡Â»â€˜i Ă„â€˜a
       if (voucher.max_discount && discount_amount > voucher.max_discount) {
         discount_amount = voucher.max_discount;
       }
     } else {
-      // FIXED - Trá»« tháº³ng tiá»n máº·t
+      // FIXED - TrĂ¡Â»Â« thĂ¡ÂºÂ³ng tiĂ¡Â»Ân mĂ¡ÂºÂ·t
       discount_amount = voucher.discount_value;
     }
 
-    // Cháº·n sá»‘ Ã‚m (Náº¿u voucher 500k Ã¡p cho hoÃ¡ Ä‘Æ¡n 100k)
+    // ChĂ¡ÂºÂ·n sĂ¡Â»â€˜ Ăƒâ€m (NĂ¡ÂºÂ¿u voucher 500k ĂƒÂ¡p cho hoĂƒÂ¡ Ă„â€˜Ă†Â¡n 100k)
     if (discount_amount >= booking.total_amount) {
       discount_amount = booking.total_amount;
     }
@@ -337,18 +361,18 @@ exports.applyVoucher = async (req, res) => {
     const old_total = booking.total_amount;
     const new_total = booking.total_amount - discount_amount;
 
-    // KAN-212: TiÃªu hao lÆ°á»£t dÃ¹ng Voucher & Cáº­p nháº­t HoÃ¡ ÄÆ¡n
+    // KAN-212: TiĂƒÂªu hao lĂ†Â°Ă¡Â»Â£t dĂƒÂ¹ng Voucher & CĂ¡ÂºÂ­p nhĂ¡ÂºÂ­t HoĂƒÂ¡ Ă„ÂĂ†Â¡n
     voucher.used_count += 1;
     await voucher.save();
 
     booking.total_amount = new_total;
-    booking.voucher_applied = voucher.code; // LÆ¯U Dáº¤U Váº¾T ÄÃƒ ÃP Dá»¤NG
-    await booking.save(); // LÆ°u giÃ¡ má»›i vÃ o DB
+    booking.voucher_applied = voucher.code; // LĂ†Â¯U DĂ¡ÂºÂ¤U VĂ¡ÂºÂ¾T Ă„ÂĂƒÆ’ ĂƒÂP DĂ¡Â»Â¤NG
+    await booking.save(); // LĂ†Â°u giĂƒÂ¡ mĂ¡Â»â€ºi vĂƒÂ o DB
 
-    // Pháº£n há»“i vá» Frontend thÃ nh cÃ´ng
+    // PhĂ¡ÂºÂ£n hĂ¡Â»â€œi vĂ¡Â»Â Frontend thĂƒÂ nh cĂƒÂ´ng
     res.status(200).json({
       success: true,
-      message: "Ãp dá»¥ng mÃ£ giáº£m giÃ¡ thÃ nh cÃ´ng!",
+      message: "ĂƒÂp dĂ¡Â»Â¥ng mĂƒÂ£ giĂ¡ÂºÂ£m giĂƒÂ¡ thĂƒÂ nh cĂƒÂ´ng!",
       data: {
         booking_id: booking._id,
         voucher_code: voucher.code,
@@ -360,21 +384,21 @@ exports.applyVoucher = async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Lá»—i há»‡ thá»‘ng khi Ã¡p dá»¥ng voucher!" });
+    res.status(500).json({ success: false, message: "LĂ¡Â»â€”i hĂ¡Â»â€¡ thĂ¡Â»â€˜ng khi ĂƒÂ¡p dĂ¡Â»Â¥ng voucher!" });
   }
 };
 
 
-// â”€â”€â”€ KAN-213: Xem láº¡i toÃ n bá»™ thÃ´ng tin Booking trÆ°á»›c khi Checkout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬ KAN-213: Xem lĂ¡ÂºÂ¡i toĂƒÂ n bĂ¡Â»â„¢ thĂƒÂ´ng tin Booking trĂ†Â°Ă¡Â»â€ºc khi Checkout Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬Ă¢â€â‚¬
 exports.getBookingById = async (req, res) => {
   try {
     const { bookingId } = req.params;
 
-    // KAN-214 & KAN-215: TÃ¬m kiáº¿m Booking vÃ  kiá»ƒm tra tÃ­nh há»£p lá»‡
+    // KAN-214 & KAN-215: TĂƒÂ¬m kiĂ¡ÂºÂ¿m Booking vĂƒÂ  kiĂ¡Â»Æ’m tra tĂƒÂ­nh hĂ¡Â»Â£p lĂ¡Â»â€¡
     const booking = await Booking.findById(bookingId).lean();
 
     if (!booking) {
-      return res.status(404).json({ success: false, message: "KhÃ´ng tÃ¬m tháº¥y thÃ´ng tin chuyáº¿n Ä‘i (Booking)!" });
+      return res.status(404).json({ success: false, message: "KhĂƒÂ´ng tĂƒÂ¬m thĂ¡ÂºÂ¥y thĂƒÂ´ng tin chuyĂ¡ÂºÂ¿n Ă„â€˜i (Booking)!" });
     }
 
     const requestUserId = getRequestUserId(req);
@@ -382,10 +406,10 @@ exports.getBookingById = async (req, res) => {
       return res.status(401).json({ success: false, message: getAuthFailureMessage(req) });
     }
     if (booking.user_id && booking.user_id.toString() !== requestUserId) {
-      return res.status(403).json({ success: false, message: "Báº¡n khÃ´ng cÃ³ quyá»n truy cáº­p thÃ´ng tin Booking nÃ y!" });
+      return res.status(403).json({ success: false, message: "BĂ¡ÂºÂ¡n khĂƒÂ´ng cĂƒÂ³ quyĂ¡Â»Ân truy cĂ¡ÂºÂ­p thĂƒÂ´ng tin Booking nĂƒÂ y!" });
     }
 
-    // KAN-216: Gom thÃ´ng tin HÃ nh KhÃ¡ch & Gháº¿ ngá»“i tá»« báº£ng Tickets
+    // KAN-216: Gom thĂƒÂ´ng tin HĂƒÂ nh KhĂƒÂ¡ch & GhĂ¡ÂºÂ¿ ngĂ¡Â»â€œi tĂ¡Â»Â« bĂ¡ÂºÂ£ng Tickets
     const tickets = await Ticket.find({ booking_id: booking._id })
       .populate({
         path: 'seat_id',
@@ -396,7 +420,7 @@ exports.getBookingById = async (req, res) => {
     let passengerDetails = [];
     let totalDiscount = 0;
 
-    // KAN-217: GhÃ©p ná»‘i Dá»¯ liá»‡u Phá»¥ (TÃ­nh nÄƒng Voucher TÆ°Æ¡ng lai)
+    // KAN-217: GhĂƒÂ©p nĂ¡Â»â€˜i DĂ¡Â»Â¯ liĂ¡Â»â€¡u PhĂ¡Â»Â¥ (TĂƒÂ­nh nĂ„Æ’ng Voucher TĂ†Â°Ă†Â¡ng lai)
     if (tickets && tickets.length > 0) {
       passengerDetails = tickets.map(ticket => {
         return {
@@ -418,7 +442,7 @@ exports.getBookingById = async (req, res) => {
       });
     }
 
-    // KAN-218: GÃ³i ghÃ©m táº¥t cáº£ Data tráº£ vá» cho Giao Diá»‡n Xong XuÃ´i
+    // KAN-218: GĂƒÂ³i ghĂƒÂ©m tĂ¡ÂºÂ¥t cĂ¡ÂºÂ£ Data trĂ¡ÂºÂ£ vĂ¡Â»Â cho Giao DiĂ¡Â»â€¡n Xong XuĂƒÂ´i
     res.status(200).json({
       success: true,
       data: {
@@ -432,7 +456,7 @@ exports.getBookingById = async (req, res) => {
           expires_at: booking.expires_at,
         },
         financials: {
-          total_amount: booking.total_amount, // ÄÃ£ tá»± gÃ¡nh tiá»n trá»« tá»« hÃ m Voucher trÆ°á»›c Ä‘Ã³
+          total_amount: booking.total_amount, // Ă„ÂĂƒÂ£ tĂ¡Â»Â± gĂƒÂ¡nh tiĂ¡Â»Ân trĂ¡Â»Â« tĂ¡Â»Â« hĂƒÂ m Voucher trĂ†Â°Ă¡Â»â€ºc Ă„â€˜ĂƒÂ³
           discount_applied: totalDiscount
         },
         passengers: passengerDetails
@@ -441,6 +465,6 @@ exports.getBookingById = async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Lá»—i há»‡ thá»‘ng khi táº£i thÃ´ng tin xÃ¡c nháº­n!" });
+    res.status(500).json({ success: false, message: "LĂ¡Â»â€”i hĂ¡Â»â€¡ thĂ¡Â»â€˜ng khi tĂ¡ÂºÂ£i thĂƒÂ´ng tin xĂƒÂ¡c nhĂ¡ÂºÂ­n!" });
   }
 };

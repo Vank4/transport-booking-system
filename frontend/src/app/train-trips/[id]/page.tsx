@@ -3,14 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
+import config from '@/config';
 import { 
     Train, ChevronLeft, Info, Users, Briefcase, 
     ShieldCheck, CheckCircle2, Loader2, ArrowRight 
 } from 'lucide-react';
 
 // --- HÀM FORMAT TIỆN ÍCH ---
-function formatCurrency(value: number) {
-    return `${value.toLocaleString("vi-VN")} VND`;
+function formatCurrency(value?: number | null) {
+    return `${(value ?? 0).toLocaleString("vi-VN")} VND`;
 }
 
 function formatDate(value: string) {
@@ -53,7 +54,7 @@ export default function TrainTripDetailPage() {
     useEffect(() => {
         const fetchDetail = async () => {
             try {
-                const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/train-trips/${id}`);
+                const response = await axios.get(`${config.apiBaseUrl}/train-trips/${id}`);
                 if (response.data.success) {
                     setTrip(response.data.data);
                     if (response.data.data.prices) {
@@ -87,7 +88,7 @@ export default function TrainTripDetailPage() {
     const currentPrice = trip.prices?.[selectedClass] || 0;
 
     return (
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fffbf7_0%,#fff0e6_38%,#ffe4d6_100%)] pt-24 pb-12 text-slate-900">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fffbf7_0%,#fff0e6_38%,#ffe4d6_100%)] pt-4 pb-12 text-slate-900">
             <div className="max-w-[1140px] mx-auto px-4 md:px-5">
 
                 {/* --- BREADCRUMB --- */}
@@ -236,7 +237,7 @@ export default function TrainTripDetailPage() {
                                             <div className="sm:text-right ml-10 sm:ml-0">
                                                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Giá từ / khách</p>
                                                 <p className={`text-xl font-black ${selectedClass === cls.id ? 'text-orange-700' : 'text-slate-900'}`}>
-                                                    {formatCurrency(trip.prices[cls.id])}
+                                                    {formatCurrency(trip.prices?.[cls.id])}
                                                 </p>
                                             </div>
                                         </label>
@@ -275,7 +276,7 @@ export default function TrainTripDetailPage() {
 
                             <div className="mt-8 space-y-3">
                                 <button
-                                    onClick={() => router.push(`/booking/seat-selection?tripId=${trip._id}&class=${selectedClass}&type=train`)}
+                                    onClick={() => router.push(`/user/bookings/seat-map?tripId=${trip._id}&class=${selectedClass}&type=train`)}
                                     className="flex w-full min-h-[3rem] items-center justify-center rounded-full bg-[linear-gradient(135deg,#ffb75e_0%,#ea580c_100%)] px-4 text-[0.95rem] font-black text-white shadow-[0_12px_24px_rgba(234,88,12,0.25)] transition hover:-translate-y-0.5 active:translate-y-0 gap-2"
                                 >
                                     Chọn toa & chỗ <ArrowRight size={18} />

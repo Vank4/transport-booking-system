@@ -3,14 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
+import config from '@/config';
 import {
     Plane, ChevronLeft, Info, Users, Briefcase,
     ShieldCheck, CheckCircle2, Loader2
 } from 'lucide-react';
 
 // --- HÀM FORMAT TIỆN ÍCH ---
-function formatCurrency(value: number) {
-    return `${value.toLocaleString("vi-VN")} VND`;
+function formatCurrency(value?: number | null) {
+    return `${(value ?? 0).toLocaleString("vi-VN")} VND`;
 }
 
 function formatDate(value: string) {
@@ -53,7 +54,7 @@ export default function FlightDetailPage() {
     useEffect(() => {
         const fetchDetail = async () => {
             try {
-                const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/flights/${id}`);
+                const response = await axios.get(`${config.apiBaseUrl}/flights/${id}`);
                 if (response.data.success) setFlight(response.data.data);
             } catch (err) {
                 console.error("Lỗi lấy chi tiết:", err);
@@ -78,10 +79,10 @@ export default function FlightDetailPage() {
         </div>
     );
 
-    const currentPrice = flight.prices?.[selectedClass] || flight.prices?.economy;
+    const currentPrice = flight.prices?.[selectedClass] ?? flight.prices?.economy ?? 0;
 
     return (
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fbff_0%,#edf4fb_38%,#e8eef6_100%)] pt-24 pb-12 text-slate-900">
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fbff_0%,#edf4fb_38%,#e8eef6_100%)] pt-4 pb-12 text-slate-900">
             <div className="max-w-[1140px] mx-auto px-4 md:px-5">
 
                 {/* --- BREADCRUMB --- */}
@@ -230,7 +231,7 @@ export default function FlightDetailPage() {
                                             <div className="sm:text-right ml-10 sm:ml-0">
                                                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Giá từ / khách</p>
                                                 <p className={`text-xl font-black ${selectedClass === cls.id ? 'text-sky-700' : 'text-slate-900'}`}>
-                                                    {formatCurrency(flight.prices[cls.id])}
+                                                    {formatCurrency(flight.prices?.[cls.id])}
                                                 </p>
                                             </div>
                                         </label>
@@ -267,7 +268,7 @@ export default function FlightDetailPage() {
 
                             <div className="mt-8 space-y-3">
                                 <button
-                                    onClick={() => router.push(`/booking/seat-selection?flightId=${flight._id}&class=${selectedClass}`)}
+                                    onClick={() => router.push(`/user/bookings/seat-map?tripId=${flight._id}&class=${selectedClass}&type=flight`)}
                                     className="flex w-full min-h-[3rem] items-center justify-center rounded-full bg-[linear-gradient(135deg,#88dbff_0%,#32afff_100%)] px-4 text-[0.95rem] font-black text-slate-950 shadow-[0_12px_24px_rgba(50,175,255,0.20)] transition hover:-translate-y-0.5 active:translate-y-0"
                                 >
                                     Chọn ghế ngồi

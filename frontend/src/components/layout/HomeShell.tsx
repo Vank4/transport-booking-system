@@ -63,6 +63,34 @@ type PopularItem = {
   route: string;
   price: string;
   image: string;
+  originCode: string;
+  destinationCode: string;
+};
+
+type PopularTripApiItem = {
+  _id: string;
+  current_price?: number;
+  starting_price?: number;
+  prices?: {
+    economy?: number;
+    business?: number;
+  };
+  departure_airport_id?: {
+    city?: string;
+    iata_code?: string;
+  };
+  arrival_airport_id?: {
+    city?: string;
+    iata_code?: string;
+  };
+  departure_station_id?: {
+    city?: string;
+    name?: string;
+  };
+  arrival_station_id?: {
+    city?: string;
+    name?: string;
+  };
 };
 
 type PromotionItem = {
@@ -72,6 +100,7 @@ type PromotionItem = {
   headline: string;
   savings: string;
   destination: string;
+  destinationQuery: string;
   couponCode: string;
   image: string;
 };
@@ -167,18 +196,24 @@ const popularByMode: Record<
         route: "Hà Nội → Đà Nẵng",
         price: "1.660.000 VND",
         image: "/images/background/backgroundFlight.jpg",
+        originCode: "HAN",
+        destinationCode: "DAD",
       },
       {
         id: "flight-2",
         route: "TP.HCM → Hà Nội",
         price: "2.760.000 VND",
         image: "/images/background/flight.png",
+        originCode: "SGN",
+        destinationCode: "HAN",
       },
       {
         id: "flight-3",
         route: "Hà Nội → Vũng Tàu",
         price: "3.660.000 VND",
         image: "/images/background/backgroundTrain.jpg",
+        originCode: "HAN",
+        destinationCode: "PQC",
       },
     ],
   },
@@ -193,18 +228,24 @@ const popularByMode: Record<
         route: "Hà Nội → Đà Nẵng",
         price: "1.660.000 VND",
         image: "/images/background/backgroundTrain.jpg",
+        originCode: "Ga Ha Noi",
+        destinationCode: "Ga Da Nang",
       },
       {
         id: "train-2",
         route: "TP.HCM → Hà Nội",
         price: "2.760.000 VND",
         image: "/images/background/train.png",
+        originCode: "Ga Sai Gon",
+        destinationCode: "Ga Ha Noi",
       },
       {
         id: "train-3",
         route: "Hà Nội → Vũng Tàu",
         price: "3.660.000 VND",
         image: "/images/background/backgroundFlight.jpg",
+        originCode: "Ga Hue",
+        destinationCode: "Ga Ha Noi",
       },
     ],
   },
@@ -225,31 +266,34 @@ const promotionsByMode: Record<
       {
         id: "promo-flight-1",
         discount: "-20%",
-        title: "International Flights",
-        headline: "Fly to Singapore",
+        title: "Ưu đãi đường bay biển",
+        headline: "Bay tới Đà Nẵng",
         savings: "Save up to 20%",
-        destination: "Singapore",
-        couponCode: "FLY20",
+        destination: "Đà Nẵng",
+        destinationQuery: "DAD",
+        couponCode: "FLYDAD20",
         image: "/images/voucher/ChatGPT Image 12_45_57 25 thg 2, 2026.png",
       },
       {
         id: "promo-flight-2",
         discount: "-30%",
-        title: "Fly to Japan",
-        headline: "Tokyo Escapes",
+        title: "Săn vé hot cuối tuần",
+        headline: "Khám phá Phú Quốc",
         savings: "Save up to 30%",
-        destination: "Japan",
-        couponCode: "JAPAN30",
+        destination: "Phú Quốc",
+        destinationQuery: "PQC",
+        couponCode: "PQC30",
         image: "/images/voucher/ChatGPT Image 12_55_53 25 thg 2, 2026.png",
       },
       {
         id: "promo-flight-3",
         discount: "-15%",
-        title: "Beach Season",
-        headline: "Fly to Bali",
+        title: "City Break",
+        headline: "Bay tới Hà Nội",
         savings: "Save up to 15%",
-        destination: "Bali",
-        couponCode: "BALI15",
+        destination: "Hà Nội",
+        destinationQuery: "HAN",
+        couponCode: "HAN15",
         image: "/images/voucher/ChatGPT Image 13_07_43 25 thg 2, 2026.png",
       },
     ],
@@ -265,6 +309,7 @@ const promotionsByMode: Record<
         headline: "Go to Da Nang",
         savings: "Save up to 20%",
         destination: "Đà Nẵng",
+        destinationQuery: "Ga Da Nang",
         couponCode: "TRAIN20",
         image: "/images/voucher/ChatGPT Image 12_45_57 25 thg 2, 2026.png",
       },
@@ -275,6 +320,7 @@ const promotionsByMode: Record<
         headline: "Ride to Hanoi",
         savings: "Save up to 25%",
         destination: "Hà Nội",
+        destinationQuery: "Ga Ha Noi",
         couponCode: "HN25",
         image: "/images/voucher/ChatGPT Image 12_55_53 25 thg 2, 2026.png",
       },
@@ -282,9 +328,10 @@ const promotionsByMode: Record<
         id: "promo-train-3",
         discount: "-15%",
         title: "City Escape",
-        headline: "Trip to Nha Trang",
+        headline: "Trip to Hue",
         savings: "Save up to 15%",
-        destination: "Nha Trang",
+        destination: "Huế",
+        destinationQuery: "Ga Hue",
         couponCode: "RAIL15",
         image: "/images/voucher/ChatGPT Image 13_07_43 25 thg 2, 2026.png",
       },
@@ -330,7 +377,7 @@ const newUserVouchersByMode: Record<
         description:
           "Áp dụng cho lần đặt đầu tiên trên web Transport Booking System",
         code: "FLYHN100",
-        destination: "TP.HCM",
+        destination: "SGN",
       },
       {
         id: "flight-voucher-3",
@@ -339,7 +386,7 @@ const newUserVouchersByMode: Record<
         description:
           "Áp dụng cho lần đặt đầu tiên trên web Transport Booking System",
         code: "DADHAN65",
-        destination: "Hà Nội",
+        destination: "HAN",
       },
     ],
   },
@@ -361,7 +408,7 @@ const newUserVouchersByMode: Record<
         description:
           "Áp dụng cho lần đặt đầu tiên trên web Transport Booking System",
         code: "TRAINHN100",
-        destination: "TP.HCM",
+        destination: "Ga Sai Gon",
       },
       {
         id: "train-voucher-3",
@@ -370,7 +417,7 @@ const newUserVouchersByMode: Record<
         description:
           "Áp dụng cho lần đặt đầu tiên trên web Transport Booking System",
         code: "RAILDNHN65",
-        destination: "Hà Nội",
+        destination: "Ga Ha Noi",
       },
     ],
   },
@@ -553,6 +600,10 @@ function formatDateLabel(value: string) {
   }).format(new Date(value));
 }
 
+function formatCurrency(value: number) {
+  return `${value.toLocaleString("vi-VN")} VND`;
+}
+
 function getPassengerSummary(adults: number, children: number) {
   return children > 0
     ? `${adults} người lớn, ${children} trẻ em`
@@ -629,7 +680,140 @@ function SearchField({
 }
 
 function PopularSection({ mode }: { mode: TravelMode }) {
+  const router = useRouter();
   const section = popularByMode[mode];
+  const [popularItems, setPopularItems] = useState<PopularItem[]>([]);
+  const [popularLoading, setPopularLoading] = useState(true);
+  const [popularError, setPopularError] = useState<string | null>(null);
+  const imagePool = useMemo(
+    () =>
+      mode === "flight"
+        ? [
+            "/images/background/backgroundFlight.jpg",
+            "/images/background/flight.png",
+            "/images/background/backgroundTrain.jpg",
+          ]
+        : [
+            "/images/background/backgroundTrain.jpg",
+            "/images/background/train.png",
+            "/images/background/backgroundFlight.jpg",
+          ],
+    [mode],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPopularTrips = async () => {
+      setPopularLoading(true);
+      setPopularError(null);
+
+      try {
+        const endpoint =
+          mode === "flight" ? "/flights/search" : "/train-trips/search";
+        const { data } = await api.get<{
+          data?: { items?: PopularTripApiItem[] };
+        }>(endpoint, {
+          params: {
+            limit: 3,
+            page: 1,
+            seat_class: "economy",
+          },
+        });
+
+        if (cancelled) return;
+
+        const items = (data?.data?.items ?? [])
+          .slice(0, 3)
+          .map((item, index) => {
+            if (mode === "flight") {
+              const origin = item.departure_airport_id?.city?.trim() || "Điểm đi";
+              const destination =
+                item.arrival_airport_id?.city?.trim() || "Điểm đến";
+              const originCode = item.departure_airport_id?.iata_code?.trim() || "";
+              const destinationCode =
+                item.arrival_airport_id?.iata_code?.trim() || "";
+              const price =
+                item.current_price ??
+                item.prices?.economy ??
+                item.prices?.business ??
+                0;
+
+              return {
+                id: item._id,
+                route: `${origin} → ${destination}`,
+                price: formatCurrency(price),
+                image: imagePool[index % imagePool.length],
+                originCode,
+                destinationCode,
+              };
+            }
+
+            const origin = item.departure_station_id?.city?.trim() || "Điểm đi";
+            const destination =
+              item.arrival_station_id?.city?.trim() || "Điểm đến";
+            const originCode = item.departure_station_id?.name?.trim() || "";
+            const destinationCode =
+              item.arrival_station_id?.name?.trim() || "";
+            const price =
+              item.starting_price ??
+              item.current_price ??
+              item.prices?.economy ??
+              0;
+
+            return {
+              id: item._id,
+              route: `${origin} → ${destination}`,
+              price: formatCurrency(price),
+              image: imagePool[index % imagePool.length],
+              originCode,
+              destinationCode,
+            };
+          })
+          .filter((item) => item.originCode && item.destinationCode);
+
+        setPopularItems(items);
+      } catch {
+        if (cancelled) return;
+        setPopularError("Chưa tải được tuyến phổ biến từ hệ thống.");
+        setPopularItems([]);
+      } finally {
+        if (!cancelled) {
+          setPopularLoading(false);
+        }
+      }
+    };
+
+    void loadPopularTrips();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imagePool, mode]);
+
+  const buildPopularHref = (item: PopularItem) => {
+    const params = new URLSearchParams({
+      type: mode,
+      origin: item.originCode,
+      destination: item.destinationCode,
+      seat_class: "economy",
+      page: "1",
+    });
+
+    return `/search?${params.toString()}`;
+  };
+  const openPopularItem = (item: PopularItem) => {
+    router.push(buildPopularHref(item));
+  };
+  const openPopularListing = () => {
+    const params = new URLSearchParams({
+      type: mode,
+      seat_class: "economy",
+      page: "1",
+    });
+
+    router.push(`/search?${params.toString()}`);
+  };
 
   return (
     <section className="w-full border-y border-slate-200/80 bg-white px-4 py-7 shadow-[0_10px_30px_rgba(15,23,42,0.05)] md:px-8 md:py-8 lg:px-10">
@@ -645,6 +829,7 @@ function PopularSection({ mode }: { mode: TravelMode }) {
           </div>
           <button
             type="button"
+            onClick={openPopularListing}
             className={cn(
               "hidden text-[0.92rem] font-medium transition md:inline-flex",
               mode === "flight"
@@ -657,9 +842,33 @@ function PopularSection({ mode }: { mode: TravelMode }) {
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {section.items.map((item) => (
+          {popularLoading && (
+            <div className="rounded-[14px] border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-sm font-medium text-slate-500 md:col-span-2 xl:col-span-3">
+              Đang tải tuyến phổ biến...
+            </div>
+          )}
+          {!popularLoading && popularError && (
+            <div className="rounded-[14px] border border-red-200 bg-red-50 px-5 py-10 text-sm font-medium text-red-600 md:col-span-2 xl:col-span-3">
+              {popularError}
+            </div>
+          )}
+          {!popularLoading && !popularError && popularItems.length === 0 && (
+            <div className="rounded-[14px] border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-sm font-medium text-slate-500 md:col-span-2 xl:col-span-3">
+              Hiện chưa có tuyến phổ biến phù hợp.
+            </div>
+          )}
+          {!popularLoading && !popularError && popularItems.map((item) => (
             <article
               key={item.id}
+              role="link"
+              tabIndex={0}
+              onClick={() => openPopularItem(item)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openPopularItem(item);
+                }
+              }}
               className="group relative overflow-hidden rounded-[14px] shadow-[0_12px_28px_rgba(15,23,42,0.13)] transition duration-300 hover:-translate-y-1.5 hover:shadow-[0_18px_34px_rgba(15,23,42,0.18)]"
             >
               <div className="relative h-[248px] md:h-[262px]">
@@ -679,6 +888,10 @@ function PopularSection({ mode }: { mode: TravelMode }) {
                   </p>
                   <button
                     type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openPopularItem(item);
+                    }}
                     className={cn(
                       "hover-sheen mt-2.5 inline-flex h-8 min-w-[146px] items-center justify-center rounded-full bg-gradient-to-r px-4 text-[0.92rem] font-medium text-slate-950 shadow-lg transition hover:brightness-105",
                       section.button,
@@ -695,6 +908,7 @@ function PopularSection({ mode }: { mode: TravelMode }) {
         <div className="mt-5 md:hidden">
           <button
             type="button"
+            onClick={openPopularListing}
             className={cn(
               "inline-flex text-[0.92rem] font-medium transition",
               mode === "flight"
@@ -726,13 +940,14 @@ function PromotionsBanner({ mode }: { mode: TravelMode }) {
   };
 
   const goToPromotion = (item: PromotionItem) => {
-    const targetPath =
-      mode === "flight" ? "/user/flights" : "/user/train-trips";
     const params = new URLSearchParams({
+      type: mode,
       promo: item.couponCode,
-      destination: item.destination,
+      destination: item.destinationQuery,
+      seat_class: "economy",
+      page: "1",
     });
-    router.push(`${targetPath}?${params.toString()}`);
+    router.push(`/search?${params.toString()}`);
   };
 
   return (
