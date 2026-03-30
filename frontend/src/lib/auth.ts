@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import config from "@/config";
 
@@ -144,6 +144,8 @@ const persistAccessToken = (token: string) => {
 
   window.localStorage.setItem(LEGACY_TOKEN_KEY, token);
   window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  // Lưu vào cookie để Next.js Middleware đọc được ở edge
+  document.cookie = `accessToken=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 };
 
 const persistRefreshToken = (token: string) => {
@@ -220,6 +222,8 @@ export function persistAuthSession({
   if (role) {
     window.localStorage.setItem(USER_ROLE_KEY, role);
     window.sessionStorage.setItem(USER_ROLE_KEY, role);
+    // Lưu role vào cookie để Middleware đọc được
+    document.cookie = `userRole=${role}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
   }
 }
 
@@ -236,6 +240,11 @@ export function clearAuthSession() {
     window.localStorage.removeItem(key);
     window.sessionStorage.removeItem(key);
   }
+
+  // Xóa cookie khi logout
+  document.cookie = 'accessToken=; path=/; max-age=0';
+  document.cookie = 'token=; path=/; max-age=0';
+  document.cookie = 'userRole=; path=/; max-age=0';
 }
 
 export function buildLoginRedirect(targetPath: string): string {

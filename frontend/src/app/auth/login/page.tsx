@@ -71,7 +71,12 @@ export default function LoginPage() {
         role,
       });
 
-      router.replace(redirectTarget);
+      // Nếu là Admin → chuyển thẳng vào Dashboard Admin
+      if (role === 'ADMIN') {
+        router.replace('/admin');
+      } else {
+        router.replace(redirectTarget === '/' ? '/' : redirectTarget);
+      }
     } catch (err: any) {
       setError(err.message || 'Đăng nhập thất bại');
     } finally {
