@@ -24,8 +24,6 @@ const flightSchema = new mongoose.Schema({
     enum: ["SCHEDULED", "DELAYED", "CANCELLED", "COMPLETED"],
     default: "SCHEDULED",
   },
-  // BỔ SUNG: Trường prices để phục vụ tính năng lọc giá (Feature Filter)
-  // Đặt default để không làm lỗi file seed cũ của các bạn khác trong team
   prices: {
     economy: { type: Number, required: true, default: 1500000 },
     business: { type: Number, required: true, default: 3000000 }
