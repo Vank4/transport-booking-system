@@ -99,7 +99,6 @@ const findFlights = async ({
   }
 
 
-  // 🔥 CHỈ HIỂN THỊ CHUYẾN BAY HIỆN TẠI VÀ TƯƠNG LAI
   const now = new Date();
 
   if (departureDate) {
