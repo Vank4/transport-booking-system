@@ -6,6 +6,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Save, User, Mail, Phone, Calendar, Users, CreditCard, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import BookingSteps from '@/components/booking/BookingSteps';
 import TripDetailsCard from '@/components/booking/TripDetailsCard';
+import api from '@/lib/api';
+import { isAuthenticated } from '@/lib/auth';
 import { getBookingDetails, savePassengerInfo } from '@/lib/api';
 import { useBookingStore } from '@/store/bookingStore';
 import type { BookingDetails, PassengerDetail } from '@/types';
@@ -25,6 +27,37 @@ interface ContactFormData {
   email: string;
 }
 
+interface UserProfile {
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  date_of_birth?: string;
+  gender?: 'Nam' | 'Nữ' | 'Khác';
+  id_card?: string;
+  passport?: string;
+}
+
+function normalizePassengerName(value?: string) {
+  const trimmed = value?.trim() ?? '';
+  return /^HANH KHACH \d+$/i.test(trimmed) ? '' : trimmed;
+}
+
+function normalizePassengerId(value?: string) {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.startsWith('TEMP-') ? '' : trimmed;
+}
+
+function mapProfileGender(value?: UserProfile['gender']): PassengerFormData['gender'] {
+  if (value === 'Nam') return 'MALE';
+  if (value === 'Nữ') return 'FEMALE';
+  if (value === 'Khác') return 'OTHER';
+  return undefined;
+}
+
+function getProfileDocument(profile?: UserProfile | null) {
+  return profile?.id_card?.trim() || profile?.passport?.trim() || '';
+}
+
 function PassengerInfoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -36,6 +69,7 @@ function PassengerInfoContent() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // Contact form state
   const [contactForm, setContactForm] = useState<ContactFormData>({
@@ -79,14 +113,49 @@ function PassengerInfoContent() {
     })();
   }, [bookingId, bookingData, setBookingId, setBookingData]);
 
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      setUserProfile(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data } = await api.get<{ data?: UserProfile }>('/auth/profile');
+        if (!cancelled) {
+          setUserProfile(data?.data ?? null);
+        }
+      } catch {
+        if (!cancelled) {
+          setUserProfile(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Initialize passenger forms when booking data is loaded
   useEffect(() => {
     if (booking?.passengers && booking.passengers.length > 0) {
       // Pre-fill forms with existing passenger data
-      const initialForms = booking.passengers.map(p => ({
+      const initialForms = booking.passengers.map((p, idx) => ({
         seat_id: p.seat_info?.id ?? '',
-        passenger_name: p.passenger_name,
-        passenger_id_card: p.id_card ?? '',
+        passenger_name:
+          normalizePassengerName(p.passenger_name) ||
+          (idx === 0 ? userProfile?.full_name?.trim() ?? '' : ''),
+        passenger_id_card:
+          normalizePassengerId(p.id_card ?? '') ||
+          (idx === 0 ? getProfileDocument(userProfile) : ''),
+        date_of_birth:
+          idx === 0 && userProfile?.date_of_birth
+            ? new Date(userProfile.date_of_birth).toISOString().slice(0, 10)
+            : undefined,
+        gender: idx === 0 ? mapProfileGender(userProfile?.gender) : undefined,
         passenger_type: 'ADULT' as 'ADULT' | 'CHILD' | 'INFANT',
       }));
       setPassengerForms(initialForms);
@@ -95,12 +164,23 @@ function PassengerInfoContent() {
       // This would need seat data from the booking flow
       setPassengerForms([{
         seat_id: '',
-        passenger_name: '',
-        passenger_id_card: '',
+        passenger_name: userProfile?.full_name?.trim() ?? '',
+        passenger_id_card: getProfileDocument(userProfile),
+        date_of_birth: userProfile?.date_of_birth
+          ? new Date(userProfile.date_of_birth).toISOString().slice(0, 10)
+          : undefined,
+        gender: mapProfileGender(userProfile?.gender),
         passenger_type: 'ADULT',
       }]);
     }
-  }, [booking]);
+  }, [booking, userProfile]);
+
+  useEffect(() => {
+    setContactForm((prev) => ({
+      phone: prev.phone || userProfile?.phone?.trim() || '',
+      email: prev.email || userProfile?.email?.trim() || '',
+    }));
+  }, [userProfile]);
 
   // Validate form
   const validateForm = (): boolean => {

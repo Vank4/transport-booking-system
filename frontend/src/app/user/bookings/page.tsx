@@ -98,6 +98,14 @@ function formatCurrency(value: number) {
   return `${value.toLocaleString("vi-VN")} VND`;
 }
 
+function getBookingPrimaryHref(booking: Booking) {
+  if (booking.status === "pending") {
+    return `/user/booking/payment?bookingId=${booking.id}`;
+  }
+
+  return `/user/bookings/${booking.id}`;
+}
+
 function mapBackendProfileToHeader(profile?: BackendProfile): HeaderProfile {
   return {
     fullName: profile?.full_name?.trim() || DEFAULT_HEADER_PROFILE.fullName,
@@ -483,14 +491,41 @@ export default function MyBookingsPage() {
               const meta = statusMeta[booking.status];
               const StatusIcon = meta.icon;
               const TransportIcon = booking.transportType === "flight" ? Plane : Train;
+              const primaryHref = getBookingPrimaryHref(booking);
               return (
-                <article key={booking.id} className="booking-card rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_16px_38px_rgba(15,23,42,0.08)]">
+                <article
+                  key={booking.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(primaryHref)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      router.push(primaryHref);
+                    }
+                  }}
+                  className={cn(
+                    "booking-card rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_16px_38px_rgba(15,23,42,0.08)]",
+                    booking.status === "pending" &&
+                      "cursor-pointer transition hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-[0_20px_44px_rgba(251,191,36,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70",
+                  )}
+                >
                   <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                     <div className="flex-1">
                       <div className="flex flex-wrap items-center gap-3">
                         <span className="flex h-10 w-10 items-center justify-center rounded-[18px] bg-sky-50 text-sky-600"><QrCode className="h-4.5 w-4.5" /></span>
                         <h3 className="text-[1.38rem] font-black tracking-tight text-slate-900">{booking.code}</h3>
-                        <button type="button" onClick={() => navigator.clipboard.writeText(booking.code).then(() => setCopiedCode(booking.code)).catch(() => setCopiedCode(booking.code))} className="interactive-chip rounded-full border border-slate-200 bg-white px-3 py-1 text-[0.76rem] font-semibold text-slate-600">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigator.clipboard
+                              .writeText(booking.code)
+                              .then(() => setCopiedCode(booking.code))
+                              .catch(() => setCopiedCode(booking.code));
+                          }}
+                          className="interactive-chip rounded-full border border-slate-200 bg-white px-3 py-1 text-[0.76rem] font-semibold text-slate-600"
+                        >
                           <span className="flex items-center gap-2"><Copy className="h-3.5 w-3.5" />{copiedCode === booking.code ? "Đã copy" : "Copy mã"}</span>
                         </button>
                       </div>
@@ -539,11 +574,25 @@ export default function MyBookingsPage() {
                       </div>
                       <div className="flex flex-wrap gap-2 xl:justify-end">
                         {booking.status === "pending" && (
-                          <button type="button" onClick={() => router.push(`/user/booking/payment?bookingId=${booking.id}`)} className="button-sheen rounded-full bg-[linear-gradient(135deg,#ffe7b5_0%,#ffbe55_100%)] px-4 py-2 text-[0.76rem] font-bold text-slate-950 shadow-[0_14px_28px_rgba(251,191,36,0.22)]">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              router.push(`/user/booking/payment?bookingId=${booking.id}`);
+                            }}
+                            className="button-sheen rounded-full bg-[linear-gradient(135deg,#ffe7b5_0%,#ffbe55_100%)] px-4 py-2 text-[0.76rem] font-bold text-slate-950 shadow-[0_14px_28px_rgba(251,191,36,0.22)]"
+                          >
                             Thanh toán ngay
                           </button>
                         )}
-                        <button type="button" onClick={() => router.push(`/user/bookings/${booking.id}`)} className="button-sheen rounded-full bg-[linear-gradient(135deg,#c8efff_0%,#56bfff_100%)] px-4 py-2 text-[0.76rem] font-bold text-slate-950 shadow-[0_14px_28px_rgba(56,189,248,0.22)]">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            router.push(`/user/bookings/${booking.id}`);
+                          }}
+                          className="button-sheen rounded-full bg-[linear-gradient(135deg,#c8efff_0%,#56bfff_100%)] px-4 py-2 text-[0.76rem] font-bold text-slate-950 shadow-[0_14px_28px_rgba(56,189,248,0.22)]"
+                        >
                           Xem chi tiết
                         </button>
                       </div>

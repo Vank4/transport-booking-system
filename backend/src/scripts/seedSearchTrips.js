@@ -3,6 +3,7 @@ const { connectDB } = require("../config/db");
 const Airline = require("../models/airlines.model");
 const Airport = require("../models/airports.model");
 const Flight = require("../models/flights.model");
+const FlightFare = require("../models/flightFares.model");
 const Seat = require("../models/seats.model");
 const Train = require("../models/trains.model");
 const TrainStation = require("../models/trainStations.model");
@@ -127,6 +128,7 @@ async function cleanupGeneratedData() {
   const generatedFlightIds = generatedFlights.map((item) => item._id);
 
   if (generatedFlightIds.length > 0) {
+    await FlightFare.deleteMany({ flight_id: { $in: generatedFlightIds } });
     await Seat.deleteMany({ flight_id: { $in: generatedFlightIds } });
     await Flight.deleteMany({ _id: { $in: generatedFlightIds } });
   }
@@ -206,6 +208,42 @@ function buildFlightSeats(flights) {
   return seatDocuments;
 }
 
+function buildFlightFares(flights) {
+  return flights.flatMap((flight) => {
+    const economyPrice = flight.prices?.economy ?? 1500000;
+    const businessPrice = flight.prices?.business ?? 3000000;
+
+    return [
+      {
+        flight_id: flight._id,
+        cabin_class: "ECONOMY",
+        fare_name: "Eco Standard",
+        base_price: economyPrice,
+        promo_price: null,
+        baggage_kg: 20,
+        carry_on_kg: 7,
+        is_refundable: false,
+        change_fee: 350000,
+        available_seats: 16,
+        is_active: true,
+      },
+      {
+        flight_id: flight._id,
+        cabin_class: "BUSINESS",
+        fare_name: "Business Flex",
+        base_price: businessPrice,
+        promo_price: null,
+        baggage_kg: 32,
+        carry_on_kg: 10,
+        is_refundable: true,
+        change_fee: 0,
+        available_seats: 8,
+        is_active: true,
+      },
+    ];
+  });
+}
+
 function buildTrainDocuments(stations) {
   const trains = [];
   const trips = [];
@@ -260,6 +298,7 @@ async function seedSearchTrips() {
 
     const flightDocs = buildFlightDocuments(airlineMap, airportMap);
     const insertedFlights = await Flight.insertMany(flightDocs);
+    await FlightFare.insertMany(buildFlightFares(insertedFlights));
     await Seat.insertMany(buildFlightSeats(insertedFlights));
 
     const { trains, trips, carriageDrafts } = buildTrainDocuments(stationMap);

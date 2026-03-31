@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import "./seat-map.css";
 import { getValidAccessToken } from "@/lib/auth";
 import { getSocket, disconnectSocket } from "@/lib/socket";
@@ -65,9 +65,19 @@ function getSeatPrice(seat: Seat): number {
   return SEAT_PRICE + (seat.price_modifier ?? 0);
 }
 
+function normalizeSeatClass(value?: string | null): Seat["class"] {
+  return String(value).toLowerCase() === "business" ? "BUSINESS" : "ECONOMY";
+}
+
+function getSeatClassLabel(value: Seat["class"]) {
+  return value === "BUSINESS" ? "Thương gia" : "Phổ thông";
+}
+
 export default function SeatMapPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tripId = searchParams.get("tripId");
+  const selectedCabinParam = searchParams.get("class");
 
   const [seatMap, setSeatMap] = useState<SeatMapData | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -83,6 +93,8 @@ export default function SeatMapPage() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const selectedIdsRef = useRef(selectedIds);
   const holdExpiredHandledRef = useRef(false);
+  const selectedCabin = normalizeSeatClass(selectedCabinParam);
+  const selectedCabinLabel = getSeatClassLabel(selectedCabin);
 
   useEffect(() => {
     selectedIdsRef.current = selectedIds;
@@ -323,9 +335,47 @@ export default function SeatMapPage() {
         })
       );
 
-      alert(
-        `Giữ ghế thành công!\nCác ghế: ${confirmed.map((seat) => seat.seat_number).join(", ")}\nChuyển sang trang nhập thông tin hành khách...`
-      );
+      const bookingType = seatMap?.tripType === "train" ? "TRAIN" : "FLIGHT";
+      const createBookingRes = await fetch(`${API_BASE}/bookings/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          trip_id: tripId,
+          booking_type: bookingType,
+          seats: confirmed.map((seat) => seat._id),
+          passengers: confirmed.map((seat, index) => ({
+            seat_id: seat._id,
+            passenger_name: `HANH KHACH ${index + 1}`,
+            passenger_id_card: `TEMP-${seat.seat_number}-${Date.now()}-${index + 1}`,
+          })),
+        }),
+      });
+
+      const bookingJson = await createBookingRes.json();
+      if (!createBookingRes.ok) {
+        setApiError(
+          bookingJson.message ??
+            "Giữ ghế thành công nhưng chưa tạo được booking để chuyển sang nhập thông tin hành khách.",
+        );
+        return;
+      }
+
+      const bookingId =
+        bookingJson.booking?._id ??
+        bookingJson.data?.booking?._id ??
+        bookingJson.data?._id ??
+        bookingJson.booking_id ??
+        bookingJson.data?.booking_id;
+
+      if (!bookingId) {
+        setApiError("Không lấy được mã booking để chuyển sang trang nhập thông tin hành khách.");
+        return;
+      }
+
+      router.push(`/user/booking/passenger-info?bookingId=${bookingId}`);
     } catch {
       setApiError("Không thể kết nối đến máy chủ. Vui lòng thử lại.");
     } finally {
@@ -333,11 +383,12 @@ export default function SeatMapPage() {
     }
   };
 
-  const selectedSeats = seats.filter((seat) => selectedIds.has(seat._id));
+  const visibleSeats = seats.filter((seat) => seat.class === selectedCabin);
+  const selectedSeats = visibleSeats.filter((seat) => selectedIds.has(seat._id));
   const totalPrice = selectedSeats.reduce((sum, seat) => sum + getSeatPrice(seat), 0);
 
   const seatRows = new Map<string, Seat[]>();
-  seats.forEach((seat) => {
+  visibleSeats.forEach((seat) => {
     const row = seat.seat_number.replace(/[A-Z]/g, "");
     if (!seatRows.has(row)) seatRows.set(row, []);
     seatRows.get(row)!.push(seat);
@@ -451,6 +502,23 @@ export default function SeatMapPage() {
                       </span>
                     </div>
                   </div>
+                  <div
+                    style={{
+                      marginTop: "1rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      padding: "0.45rem 0.8rem",
+                      borderRadius: "999px",
+                      background: selectedCabin === "BUSINESS" ? "#eff6ff" : "#f0fdf4",
+                      color: selectedCabin === "BUSINESS" ? "#1d4ed8" : "#15803d",
+                      fontWeight: 700,
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    <i className="fa-solid fa-chair" />
+                    Đang chọn hạng ghế: {selectedCabinLabel}
+                  </div>
                 </div>
               </section>
             )}
@@ -467,11 +535,27 @@ export default function SeatMapPage() {
 
             <section className="seat-map-wrapper card">
               <div className="map-header">
-                <h3>Sơ đồ ghế ngồi</h3>
-                <p>Vui lòng nhấn vào ghế trống để chọn.</p>
+                <h3>Sơ đồ ghế {selectedCabinLabel}</h3>
+                <p>
+                  {visibleSeats.length === 0
+                    ? `Hiện chưa có ghế thuộc hạng ${selectedCabinLabel.toLowerCase()} cho chuyến này.`
+                    : `Vui lòng nhấn vào ghế trống thuộc hạng ${selectedCabinLabel.toLowerCase()} để chọn.`}
+                </p>
               </div>
               <div className="seat-map-container">
                 <div className="seat-map-grid" id="seat-map-grid">
+                  {visibleSeats.length === 0 && (
+                    <div
+                      style={{
+                        textAlign: "center",
+                        color: "#64748b",
+                        padding: "1.5rem 0",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Không có sơ đồ ghế cho hạng {selectedCabinLabel.toLowerCase()}.
+                    </div>
+                  )}
                   {Array.from(seatRows.entries()).map(([rowLabel, rowSeats]) => {
                     const leftGroup = rowSeats.filter((seat) => ["A", "B"].some((code) => seat.seat_number.endsWith(code)));
                     const rightGroup = rowSeats.filter((seat) => ["C", "D"].some((code) => seat.seat_number.endsWith(code)));
@@ -584,7 +668,7 @@ export default function SeatMapPage() {
                 <button
                   className="btn btn-primary"
                   id="btn-continue"
-                  disabled={selectedSeats.length === 0 || isProcessing}
+                  disabled={selectedSeats.length === 0 || isProcessing || visibleSeats.length === 0}
                   onClick={handleContinue}
                 >
                   {isProcessing ? (

@@ -232,7 +232,7 @@ export async function savePassengerInfo(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const { data: response } = await api.post<{ success: boolean; message: string }>(
-      `/bookings/${bookingId}/passengers`,
+      `/passengers/${bookingId}/passengers`,
       data
     );
     if (!response.success) throw new Error(response.message ?? 'Khong the luu thong tin hanh khach');
