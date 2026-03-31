@@ -98,13 +98,24 @@ const findFlights = async ({
     query.arrival_airport_id = destAirport._id;
   }
 
-  // 🔥 Đã sửa lỗi UTC, chỉ tìm trong nguyên 1 ngày Local
+
+  // 🔥 CHỈ HIỂN THỊ CHUYẾN BAY HIỆN TẠI VÀ TƯƠNG LAI
+  const now = new Date();
+
   if (departureDate) {
     const startOfDay = new Date(departureDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(departureDate);
     endOfDay.setHours(23, 59, 59, 999);
-    query.departure_time = { $gte: startOfDay, $lte: endOfDay };
+
+    query.departure_time = {
+      // Nếu khách chọn ngày hôm nay -> Lấy từ giờ hiện tại. Nếu chọn ngày mai -> Lấy từ 0h sáng.
+      $gte: startOfDay < now ? now : startOfDay,
+      $lte: endOfDay
+    };
+  } else {
+    // Nếu khách không chọn ngày -> Mặc định bỏ qua tất cả vé trong quá khứ
+    query.departure_time = { $gte: now };
   }
 
   const seatClass = filters.seat_class ? filters.seat_class.toLowerCase() : "economy";
