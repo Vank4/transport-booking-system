@@ -15,8 +15,8 @@
     --seat-selected: #2563eb;
     --seat-selected-border: #1d4ed8;
 
-    --seat-held: #fbbf24;
-    --seat-held-border: #f59e0b;
+    --seat-held: #93c5fd;
+    --seat-held-border: #3b82f6;
 
     --seat-booked: #e2e8f0;
     --seat-booked-text: #94a3b8;
@@ -356,7 +356,7 @@ body {
 .seat.status-held {
     background: var(--seat-held);
     border: 2px solid var(--seat-held-border);
-    color: #78350f;
+    color: #1e3a8a;
     cursor: not-allowed;
     opacity: 0.9;
 }
