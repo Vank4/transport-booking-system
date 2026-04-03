@@ -347,7 +347,7 @@ export default function SeatMapPage() {
     if (pendingSeatIdsRef.current.has(seat._id)) return;
 
     const isSelected = selectedIdsRef.current.has(seat._id);
-    if (!isSelected && (seat.status === "BOOKED" || seat.status === "HELD")) {
+    if (!isSelected && seat.status === "BOOKED") {
       return;
     }
 

@@ -202,10 +202,11 @@ async function holdSeats({ seatIds, tripType, tripId, userId }) {
 	for (const seat of seats) {
 		const isHeldActive =
 			seat.status === "HELD" &&
-			seat.hold_expired_at &&
-			seat.hold_expired_at > now;
+			(!seat.hold_expired_at || seat.hold_expired_at > now);
+		const isHeldByCurrentUser =
+			seat.held_by && seat.held_by.toString() === userId.toString();
 
-		if (seat.status === "BOOKED" || isHeldActive) {
+		if (seat.status === "BOOKED" || (isHeldActive && !isHeldByCurrentUser)) {
 			throw new SeatServiceError(
 				`Seat ${seat.seat_number} is not available.`,
 				409,
@@ -276,6 +277,7 @@ async function releaseSeats({ seatIds, tripId, userId }) {
 		seats.map((seat) => {
 			seat.status = "AVAILABLE";
 			seat.held_by = null;
+			seat.held_by_booking_id = null;
 			seat.hold_expired_at = null;
 			return seat.save();
 		}),
@@ -354,10 +356,11 @@ async function selectSeats({ tripId, seatIds, userId }) {
 				"SEAT_NOT_AVAILABLE",
 			);
 		}
-		if (
+		const isHeldActive =
 			seat.status === "HELD" &&
-			seat.hold_expired_at &&
-			seat.hold_expired_at > now &&
+			(!seat.hold_expired_at || seat.hold_expired_at > now);
+		if (
+			isHeldActive &&
 			seat.held_by?.toString() !== userId.toString()
 		) {
 			throw new SeatServiceError(
