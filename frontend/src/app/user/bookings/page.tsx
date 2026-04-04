@@ -444,23 +444,86 @@ export default function MyBookingsPage() {
 
             {showFilters && (
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value as StatusFilter }))} className="interactive-chip rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm">
-                  <option value="all">Trạng thái: Tất cả</option>
-                  <option value="paid">Đã thanh toán</option>
-                  <option value="pending">Chờ thanh toán</option>
-                  <option value="expired">Hết hạn</option>
-                </select>
-                <input type="date" value={filters.bookingDate} onChange={(e) => setFilters((prev) => ({ ...prev, bookingDate: e.target.value }))} className="interactive-chip rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm" />
-                <input type="date" value={filters.departureDate} onChange={(e) => setFilters((prev) => ({ ...prev, departureDate: e.target.value }))} className="interactive-chip rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm" />
-                <input type="date" value={filters.arrivalDate} onChange={(e) => setFilters((prev) => ({ ...prev, arrivalDate: e.target.value }))} className="interactive-chip rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm" />
-                <select value={filters.origin} onChange={(e) => setFilters((prev) => ({ ...prev, origin: e.target.value }))} className="interactive-chip rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm">
-                  <option value="">Điểm khởi hành: Tất cả</option>
-                  {origins.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-                <select value={filters.destination} onChange={(e) => setFilters((prev) => ({ ...prev, destination: e.target.value }))} className="interactive-chip rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm">
-                  <option value="">Điểm đến: Tất cả</option>
-                  {destinations.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
+                <label className="block">
+                  <span className="mb-1.5 block px-1 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Trạng thái
+                  </span>
+                  <select
+                    aria-label="Trạng thái"
+                    value={filters.status}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value as StatusFilter }))}
+                    className="interactive-chip w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm"
+                  >
+                    <option value="all">Tất cả</option>
+                    <option value="paid">Đã thanh toán</option>
+                    <option value="pending">Chờ thanh toán</option>
+                    <option value="expired">Hết hạn</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block px-1 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Ngày đặt
+                  </span>
+                  <input
+                    type="date"
+                    aria-label="Ngày đặt"
+                    value={filters.bookingDate}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, bookingDate: e.target.value }))}
+                    className="interactive-chip w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block px-1 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Ngày khởi hành
+                  </span>
+                  <input
+                    type="date"
+                    aria-label="Ngày khởi hành"
+                    value={filters.departureDate}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, departureDate: e.target.value }))}
+                    className="interactive-chip w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block px-1 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Ngày đến
+                  </span>
+                  <input
+                    type="date"
+                    aria-label="Ngày đến"
+                    value={filters.arrivalDate}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, arrivalDate: e.target.value }))}
+                    className="interactive-chip w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block px-1 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Điểm khởi hành
+                  </span>
+                  <select
+                    aria-label="Điểm khởi hành"
+                    value={filters.origin}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, origin: e.target.value }))}
+                    className="interactive-chip w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm"
+                  >
+                    <option value="">Tất cả</option>
+                    {origins.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block px-1 text-[0.72rem] font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Điểm đến
+                  </span>
+                  <select
+                    aria-label="Điểm đến"
+                    value={filters.destination}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, destination: e.target.value }))}
+                    className="interactive-chip w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-[0.8rem] font-medium text-slate-700 outline-none shadow-sm"
+                  >
+                    <option value="">Tất cả</option>
+                    {destinations.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
               </div>
             )}
           </div>
