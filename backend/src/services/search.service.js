@@ -10,6 +10,12 @@ const TrainCarriage = require("../models/trainCarriages.model");
 const clampLimit = (limit, fallback = 20) =>
   Math.max(1, Math.min(Number(limit) || fallback, 50));
 
+const normalizeCountry = (value = "") => value.trim().toLowerCase();
+const isVietnamAirport = (airport) =>
+  ["vietnam", "viet nam", "vn"].includes(
+    normalizeCountry(airport?.country || ""),
+  );
+
 const listAirports = async ({ q = "", limit = 20 } = {}) => {
   const trimmed = q.trim();
   const query = trimmed
@@ -461,6 +467,121 @@ const checkTrainAvailability = async (tripId, seatClass) => {
   return { available_count: availableCount, status };
 };
 
+const getHomeFlightDeals = async ({
+  scope = "domestic",
+  limit = 18,
+  perDestinationLimit = 12,
+} = {}) => {
+  const normalizedScope = scope === "international" ? "international" : "domestic";
+  const now = new Date();
+
+  const flights = await Flight.find({
+    status: "SCHEDULED",
+    departure_time: { $gte: now },
+  })
+    .populate("departure_airport_id", "name city country iata_code")
+    .populate("arrival_airport_id", "name city country iata_code")
+    .sort({ departure_time: 1 })
+    .limit(120)
+    .lean();
+
+  const filteredFlights = flights.filter((flight) => {
+    const departureAirport = flight.departure_airport_id;
+    const arrivalAirport = flight.arrival_airport_id;
+    if (!departureAirport || !arrivalAirport) return false;
+
+    const domestic =
+      isVietnamAirport(departureAirport) && isVietnamAirport(arrivalAirport);
+
+    return normalizedScope === "domestic" ? domestic : !domestic;
+  });
+
+  const flightIds = filteredFlights.map((flight) => flight._id);
+  const fares = await FlightFare.find({
+    flight_id: { $in: flightIds },
+    is_active: true,
+  })
+    .select("flight_id base_price promo_price")
+    .lean();
+
+  const bestPriceByFlightId = new Map();
+  fares.forEach((fare) => {
+    const flightId = fare.flight_id.toString();
+    const effectivePrice = fare.promo_price ?? fare.base_price ?? 0;
+    const previous = bestPriceByFlightId.get(flightId);
+    if (previous == null || effectivePrice < previous) {
+      bestPriceByFlightId.set(flightId, effectivePrice);
+    }
+  });
+
+  const groupedItems = new Map();
+
+  filteredFlights.forEach((flight) => {
+    const departureAirport = flight.departure_airport_id;
+    const arrivalAirport = flight.arrival_airport_id;
+    const destinationCode = arrivalAirport?.iata_code;
+    if (!destinationCode) return;
+
+    const startingPrice =
+      bestPriceByFlightId.get(flight._id.toString()) ??
+      flight.prices?.economy ??
+      0;
+    const oldPrice =
+      startingPrice > 0 ? Math.round(startingPrice * 1.12) : startingPrice;
+
+    const item = {
+      id: flight._id,
+      flight_id: flight._id,
+      flight_number: flight.flight_number,
+      departure_code: departureAirport?.iata_code ?? "",
+      departure_city: departureAirport?.city ?? "",
+      arrival_code: arrivalAirport?.iata_code ?? "",
+      arrival_city: arrivalAirport?.city ?? "",
+      departure_time: flight.departure_time,
+      arrival_time: flight.arrival_time,
+      destinationCode,
+      destinationLabel: arrivalAirport?.city ?? destinationCode,
+      current_price: startingPrice,
+      old_price: oldPrice,
+    };
+
+    if (!groupedItems.has(destinationCode)) {
+      groupedItems.set(destinationCode, []);
+    }
+
+    groupedItems.get(destinationCode).push(item);
+  });
+
+  const tabs = [];
+  const items = [];
+
+  Array.from(groupedItems.entries())
+    .slice(0, clampLimit(limit, 18))
+    .forEach(([code, group]) => {
+      const sortedGroup = group
+        .sort(
+          (a, b) =>
+            new Date(a.departure_time).getTime() -
+            new Date(b.departure_time).getTime(),
+        )
+        .slice(0, clampLimit(perDestinationLimit, 6));
+
+      if (sortedGroup.length === 0) return;
+
+      tabs.push({
+        code,
+        label: sortedGroup[0].destinationLabel || code,
+      });
+      items.push(...sortedGroup);
+    });
+
+  return {
+    scope: normalizedScope,
+    tabs,
+    items,
+  };
+};
+
 module.exports = {
   listAirports,
   listTrainStations,
@@ -470,4 +591,5 @@ module.exports = {
   getTrainTripDetails,
   checkFlightAvailability,
   checkTrainAvailability,
+  getHomeFlightDeals,
 };

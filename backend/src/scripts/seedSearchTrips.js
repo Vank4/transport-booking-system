@@ -10,7 +10,8 @@ const TrainStation = require("../models/trainStations.model");
 const TrainTrip = require("../models/trainTrips.model");
 const TrainCarriage = require("../models/trainCarriages.model");
 
-const FLIGHT_COUNT = 50;
+const DOMESTIC_FLIGHT_COUNT = 36;
+const INTERNATIONAL_FLIGHT_COUNT = 48;
 const TRAIN_TRIP_COUNT = 50;
 const GENERATED_FLIGHT_PREFIX = "SBF";
 const GENERATED_TRAIN_PREFIX = "SEEDTR";
@@ -29,6 +30,15 @@ const AIRPORTS = [
   { iata_code: "CXR", name: "Cam Ranh International Airport", city: "Khanh Hoa", country: "Vietnam" },
   { iata_code: "HPH", name: "Cat Bi International Airport", city: "Hai Phong", country: "Vietnam" },
   { iata_code: "PQC", name: "Phu Quoc International Airport", city: "Phu Quoc", country: "Vietnam" },
+  { iata_code: "NRT", name: "Narita International Airport", city: "Tokyo", country: "Japan" },
+  { iata_code: "SIN", name: "Singapore Changi Airport", city: "Singapore", country: "Singapore" },
+  { iata_code: "BKK", name: "Suvarnabhumi Airport", city: "Bangkok", country: "Thailand" },
+  { iata_code: "ICN", name: "Incheon International Airport", city: "Seoul", country: "South Korea" },
+  { iata_code: "SYD", name: "Sydney Airport", city: "Sydney", country: "Australia" },
+  { iata_code: "CDG", name: "Charles de Gaulle Airport", city: "Paris", country: "France" },
+  { iata_code: "KUL", name: "Kuala Lumpur International Airport", city: "Kuala Lumpur", country: "Malaysia" },
+  { iata_code: "HKG", name: "Hong Kong International Airport", city: "Hong Kong", country: "Hong Kong" },
+  { iata_code: "TPE", name: "Taoyuan International Airport", city: "Taipei", country: "Taiwan" },
 ];
 
 const TRAIN_STATIONS = [
@@ -40,7 +50,7 @@ const TRAIN_STATIONS = [
   { name: "Ga Sai Gon", city: "Ho Chi Minh City" },
 ];
 
-const FLIGHT_ROUTES = [
+const DOMESTIC_FLIGHT_ROUTES = [
   { from: "HAN", to: "SGN", durationMinutes: 130, economy: 1450000, business: 3150000 },
   { from: "SGN", to: "HAN", durationMinutes: 135, economy: 1520000, business: 3220000 },
   { from: "HAN", to: "DAD", durationMinutes: 85, economy: 920000, business: 2090000 },
@@ -51,6 +61,30 @@ const FLIGHT_ROUTES = [
   { from: "HAN", to: "PQC", durationMinutes: 122, economy: 1590000, business: 3320000 },
   { from: "DAD", to: "HPH", durationMinutes: 97, economy: 1120000, business: 2400000 },
   { from: "CXR", to: "SGN", durationMinutes: 68, economy: 840000, business: 1900000 },
+];
+
+const INTERNATIONAL_FLIGHT_ROUTES = [
+  { from: "SGN", to: "NRT", durationMinutes: 330, economy: 6840000, business: 14900000 },
+  { from: "HAN", to: "NRT", durationMinutes: 320, economy: 6620000, business: 14500000 },
+  { from: "SGN", to: "SIN", durationMinutes: 125, economy: 2960000, business: 6180000 },
+  { from: "DAD", to: "SIN", durationMinutes: 155, economy: 3420000, business: 6820000 },
+  { from: "HAN", to: "BKK", durationMinutes: 115, economy: 3180000, business: 6540000 },
+  { from: "SGN", to: "ICN", durationMinutes: 320, economy: 6240000, business: 13800000 },
+  { from: "SGN", to: "SYD", durationMinutes: 500, economy: 9860000, business: 21900000 },
+  { from: "HAN", to: "CDG", durationMinutes: 765, economy: 13860000, business: 28900000 },
+  { from: "HAN", to: "SIN", durationMinutes: 190, economy: 3340000, business: 6880000 },
+  { from: "SGN", to: "BKK", durationMinutes: 100, economy: 3090000, business: 6420000 },
+  { from: "DAD", to: "BKK", durationMinutes: 110, economy: 3280000, business: 6640000 },
+  { from: "HAN", to: "ICN", durationMinutes: 265, economy: 5920000, business: 12900000 },
+  { from: "SGN", to: "CDG", durationMinutes: 810, economy: 14160000, business: 29400000 },
+  { from: "HAN", to: "SYD", durationMinutes: 555, economy: 10480000, business: 22400000 },
+  { from: "DAD", to: "ICN", durationMinutes: 275, economy: 6080000, business: 13300000 },
+  { from: "SGN", to: "KUL", durationMinutes: 120, economy: 2860000, business: 5950000 },
+  { from: "HAN", to: "KUL", durationMinutes: 185, economy: 3140000, business: 6280000 },
+  { from: "SGN", to: "HKG", durationMinutes: 165, economy: 4280000, business: 8920000 },
+  { from: "HAN", to: "HKG", durationMinutes: 135, economy: 3960000, business: 8460000 },
+  { from: "SGN", to: "TPE", durationMinutes: 220, economy: 4520000, business: 9080000 },
+  { from: "HAN", to: "TPE", durationMinutes: 175, economy: 4260000, business: 8760000 },
 ];
 
 const TRAIN_ROUTES = [
@@ -165,25 +199,45 @@ async function cleanupGeneratedData() {
 function buildFlightDocuments(airlines, airports) {
   const documents = [];
 
-  for (let index = 0; index < FLIGHT_COUNT; index += 1) {
-    const route = FLIGHT_ROUTES[index % FLIGHT_ROUTES.length];
-    const airline = AIRLINES[index % AIRLINES.length];
-    const departureTime = buildDepartureDate(index, 1 + ((index * 3) % 20), (index % 4) * 15);
+  const pushFlightDocuments = ({ routes, count, startIndex, hourSeedOffset }) => {
+    for (let index = 0; index < count; index += 1) {
+      const route = routes[index % routes.length];
+      const airline = AIRLINES[(startIndex + index) % AIRLINES.length];
+      const departureTime = buildDepartureDate(
+        startIndex + index,
+        hourSeedOffset + (((startIndex + index) * 3) % 20),
+        ((startIndex + index) % 4) * 15,
+      );
 
-    documents.push({
-      airline_id: airlines.get(airline.iata_code)._id,
-      flight_number: `${GENERATED_FLIGHT_PREFIX}${String(index + 1).padStart(3, "0")}`,
-      departure_airport_id: airports.get(route.from)._id,
-      arrival_airport_id: airports.get(route.to)._id,
-      departure_time: departureTime,
-      arrival_time: addMinutes(departureTime, route.durationMinutes),
-      status: "SCHEDULED",
-      prices: {
-        economy: route.economy + (index % 5) * 45000,
-        business: route.business + (index % 5) * 70000,
-      },
-    });
-  }
+      documents.push({
+        airline_id: airlines.get(airline.iata_code)._id,
+        flight_number: `${GENERATED_FLIGHT_PREFIX}${String(startIndex + index + 1).padStart(3, "0")}`,
+        departure_airport_id: airports.get(route.from)._id,
+        arrival_airport_id: airports.get(route.to)._id,
+        departure_time: departureTime,
+        arrival_time: addMinutes(departureTime, route.durationMinutes),
+        status: "SCHEDULED",
+        prices: {
+          economy: route.economy + (index % 5) * 45000,
+          business: route.business + (index % 5) * 70000,
+        },
+      });
+    }
+  };
+
+  pushFlightDocuments({
+    routes: DOMESTIC_FLIGHT_ROUTES,
+    count: DOMESTIC_FLIGHT_COUNT,
+    startIndex: 0,
+    hourSeedOffset: 1,
+  });
+
+  pushFlightDocuments({
+    routes: INTERNATIONAL_FLIGHT_ROUTES,
+    count: INTERNATIONAL_FLIGHT_COUNT,
+    startIndex: DOMESTIC_FLIGHT_COUNT,
+    hourSeedOffset: 3,
+  });
 
   return documents;
 }

@@ -8,6 +8,7 @@ router.get("/train-trips/locations", searchController.listTrainStations);
 
 router.get("/flights/search", searchController.searchFlights);
 router.get("/train-trips/search", searchController.searchTrainTrips);
+router.get("/home/flight-deals", searchController.getHomeFlightDeals);
 
 router.get("/flights/:id/availability", searchController.checkFlightSeats);
 router.get("/train-trips/:id/availability", searchController.checkTrainSeats);

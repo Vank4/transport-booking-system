@@ -125,6 +125,27 @@ type DomesticDealItem = {
   destinationCode: string;
 };
 
+type HomeFlightDealItem = {
+  id: string;
+  flight_id: string;
+  flight_number: string;
+  departure_code: string;
+  departure_city: string;
+  arrival_code: string;
+  arrival_city: string;
+  departure_time: string;
+  arrival_time: string;
+  destinationCode: string;
+  destinationLabel: string;
+  current_price: number;
+  old_price: number;
+};
+
+type HomeFlightDealsPayload = {
+  tabs: Array<{ code: string; label: string }>;
+  items: HomeFlightDealItem[];
+};
+
 type BookingStep = {
   id: string;
   number: string;
@@ -636,6 +657,20 @@ const HOME_SEARCH_LOCATION_MAP: Record<TravelMode, Record<string, string>> = {
 };
 
 const NEWSLETTER_STORAGE_KEY = "home-newsletter-signups";
+const FLIGHT_DEAL_IMAGE_BY_CODE: Record<string, string> = {
+  HAN: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Hoan_Kiem_Lake,_Hanoi,_Vietnam.jpg",
+  SGN: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Ho_Chi_Minh_City_Skyline_(night).jpg",
+  DAD: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Dragon_Bridge,_Da_Nang_(49040841826).jpg",
+  CXR: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Nha_Trang_Beach_5.jpg",
+  HPH: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Haiphong_Opera_House.jpg",
+  PQC: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Phu_quoc_3.jpg",
+  NRT: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Tokyo_Montage_2015.jpg",
+  SIN: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Singapore_Panorama_v2.jpg",
+  BKK: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Grand_Palace,_Bangkok._Thailand_(15658779983).jpg",
+  ICN: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Seoul_Skyline_(6907571755).jpg",
+  SYD: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Sydney_Skyline_(2049714613).jpg",
+  CDG: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Paris_Skyline_-_roofs.jpg",
+};
 
 function normalizeHomeSearchLocation(mode: TravelMode, value: string) {
   return HOME_SEARCH_LOCATION_MAP[mode][value] ?? value;
@@ -647,6 +682,21 @@ function parseDealDateToIso(value: string) {
 
   const [, day, month, year] = matched;
   return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function getFlightDealImageUrl(destinationCode: string, destinationLabel: string) {
+  return (
+    FLIGHT_DEAL_IMAGE_BY_CODE[destinationCode] ??
+    `https://source.unsplash.com/featured/1200x800/?${encodeURIComponent(
+      `${destinationLabel} skyline airplane`,
+    )}`
+  );
+}
+
+function toSearchDate(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
 }
 
 function getStoredNewsletterSignups() {
@@ -1459,12 +1509,269 @@ function DealsSection({
   );
 }
 
+function FlightDealsSection({
+  scope,
+  title,
+}: {
+  scope: "domestic" | "international";
+  title: string;
+}) {
+  const router = useRouter();
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [deals, setDeals] = useState<HomeFlightDealsPayload>({
+    tabs: [],
+    items: [],
+  });
+  const [activeTab, setActiveTab] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDeals = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `${config.apiBaseUrl}/home/flight-deals?scope=${scope}&limit=12&per_destination_limit=12`,
+        );
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok || !payload?.success) {
+          throw new Error(
+            payload?.message ?? "Khong the tai danh sach uu dai chuyen bay",
+          );
+        }
+
+        const nextDeals = {
+          tabs: Array.isArray(payload?.data?.tabs) ? payload.data.tabs : [],
+          items: Array.isArray(payload?.data?.items) ? payload.data.items : [],
+        };
+
+        if (cancelled) return;
+        setDeals(nextDeals);
+        setActiveTab((current) => current || nextDeals.tabs[0]?.code || "");
+      } catch (fetchError) {
+        if (cancelled) return;
+        setDeals({ tabs: [], items: [] });
+        setError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Khong the tai danh sach uu dai chuyen bay",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadDeals();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scope]);
+
+  useEffect(() => {
+    if (!deals.tabs.some((tab) => tab.code === activeTab)) {
+      setActiveTab(deals.tabs[0]?.code || "");
+    }
+  }, [activeTab, deals.tabs]);
+
+  const visibleItems = deals.items.filter(
+    (item) => item.destinationCode === activeTab,
+  );
+
+  const scrollDeals = (direction: "prev" | "next") => {
+    const node = trackRef.current;
+    if (!node) return;
+    const amount = Math.max(node.clientWidth * 0.7, 260);
+    node.scrollBy({
+      left: direction === "next" ? amount : -amount,
+      behavior: "smooth",
+    });
+  };
+
+  const openDeal = (item: HomeFlightDealItem) => {
+    const params = new URLSearchParams({
+      type: "flight",
+      origin: item.departure_code,
+      destination: item.arrival_code,
+      page: "1",
+    });
+
+    const searchDate = toSearchDate(item.departure_time);
+    if (searchDate) {
+      params.set("departure_date", searchDate);
+    }
+
+    router.push(`/search?${params.toString()}`);
+  };
+
+  return (
+    <section className="w-full border-y border-slate-200/80 bg-white px-4 py-7 shadow-[0_10px_30px_rgba(15,23,42,0.05)] md:px-8 md:py-8 lg:px-10">
+      <div className="mx-auto max-w-[1100px]">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/images/icons/icons8-plane-94.png"
+            alt=""
+            width={36}
+            height={36}
+            className="h-8 w-8 object-contain"
+          />
+          <h2 className="text-[1.28rem] font-bold tracking-tight text-sky-500 md:text-[1.55rem]">
+            {title}
+          </h2>
+        </div>
+
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {deals.tabs.map((tab) => (
+            <button
+              key={tab.code}
+              type="button"
+              onClick={() => setActiveTab(tab.code)}
+              className={cn(
+                "shrink-0 rounded-full border px-4 py-1.5 text-[0.92rem] font-medium transition",
+                activeTab === tab.code
+                  ? "border-sky-300 bg-sky-100 text-sky-700"
+                  : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100",
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {loading && (
+          <div className="mt-5 rounded-[14px] border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-sm font-medium text-slate-500">
+            Dang tai uu dai chuyen bay...
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="mt-5 rounded-[14px] border border-red-200 bg-red-50 px-5 py-10 text-sm font-medium text-red-600">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && visibleItems.length === 0 && (
+          <div className="mt-5 rounded-[14px] border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-sm font-medium text-slate-500">
+            Chua co du lieu chuyen bay phu hop trong he thong.
+          </div>
+        )}
+
+        {!loading && !error && visibleItems.length > 0 && (
+          <>
+            <div className="relative mt-5">
+              <button
+                type="button"
+                onClick={() => scrollDeals("prev")}
+                className="carousel-nav absolute left-0 top-[5.25rem] z-10 hidden h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full border-2 border-sky-400 bg-white text-xl text-slate-900 shadow-lg md:flex"
+                aria-label={`Previous ${scope} flight deals`}
+              >
+                {"<-"}
+              </button>
+
+              <div
+                ref={trackRef}
+                className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {visibleItems.map((item) => (
+                  <article
+                    key={item.id}
+                    onClick={() => openDeal(item)}
+                    className="group min-w-[235px] flex-[0_0_82%] cursor-pointer overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)] transition duration-300 hover:-translate-y-1.5 hover:shadow-[0_18px_30px_rgba(15,23,42,0.18)] sm:flex-[0_0_48%] lg:flex-[0_0_22%]"
+                  >
+                    <div className="relative h-[165px]">
+                      <img
+                        src={getFlightDealImageUrl(
+                          item.arrival_code,
+                          item.destinationLabel,
+                        )}
+                        alt={`${item.departure_city} den ${item.arrival_city}`}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="p-3">
+                      <h3 className="text-[0.95rem] font-semibold text-slate-900">
+                        {item.departure_city} {"->"} {item.arrival_city}
+                      </h3>
+                      <p className="mt-1 text-[0.88rem] text-slate-700">
+                        {formatDateLabel(item.departure_time)}
+                      </p>
+                      <p className="mt-1 text-[0.9rem] text-slate-500 line-through">
+                        {formatCurrency(item.old_price)}
+                      </p>
+                      <p className="text-[1rem] font-bold text-amber-500">
+                        {formatCurrency(item.current_price)}
+                      </p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => scrollDeals("next")}
+                className="carousel-nav absolute right-0 top-[5.25rem] z-10 hidden h-11 w-11 translate-x-1/2 items-center justify-center rounded-full border-2 border-sky-400 bg-white text-xl text-slate-900 shadow-lg md:flex"
+                aria-label={`Next ${scope} flight deals`}
+              >
+                {"->"}
+              </button>
+            </div>
+
+            <div className="mt-7 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  const params = new URLSearchParams({
+                    type: "flight",
+                    page: "1",
+                  });
+
+                  if (activeTab) {
+                    params.set("destination", activeTab);
+                  }
+
+                  router.push(`/search?${params.toString()}`);
+                }}
+                className="hover-sheen inline-flex h-10 min-w-[260px] items-center justify-center rounded-[10px] bg-[linear-gradient(90deg,#eef8ff_0%,#bfe6ff_45%,#55b8ff_100%)] px-6 text-[0.98rem] font-semibold text-slate-900 shadow-sm"
+              >
+                Xem them uu dai hay {">"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function DomesticDealsSection({ mode }: { mode: TravelMode }) {
+  if (mode === "flight") {
+    return (
+      <FlightDealsSection
+        scope="domestic"
+        title="Ve may bay noi dia gia tot!"
+      />
+    );
+  }
+
   return <DealsSection mode={mode} section={domesticDealsByMode[mode]} />;
 }
 
 function InternationalFlightDealsSection() {
-  return <DealsSection mode="flight" section={internationalFlightDeals} />;
+  return (
+    <FlightDealsSection
+      scope="international"
+      title="Ve may bay quoc te gia tot nhat!"
+    />
+  );
 }
 
 function BookingStepsSection() {

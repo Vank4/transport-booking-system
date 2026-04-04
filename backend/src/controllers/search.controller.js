@@ -198,6 +198,26 @@ const checkTrainSeats = async (req, res, next) => {
   }
 };
 
+const getHomeFlightDeals = async (req, res, next) => {
+  try {
+    const { scope, limit, per_destination_limit } = req.query;
+    const result = await searchService.getHomeFlightDeals({
+      scope,
+      limit,
+      perDestinationLimit: per_destination_limit,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: "Home flight deals loaded",
+      errors: null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listAirports,
   listTrainStations,
@@ -207,4 +227,5 @@ module.exports = {
   getTrainTripById,
   checkFlightSeats,
   checkTrainSeats,
+  getHomeFlightDeals,
 };
