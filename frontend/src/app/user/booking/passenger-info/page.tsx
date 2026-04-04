@@ -272,6 +272,11 @@ function PassengerInfoContent() {
         passengers: passengersWithContact,
       });
 
+      // Refresh booking details so checkout reads the latest passenger info
+      const updatedBooking = await getBookingDetails(bookingId);
+      setBooking(updatedBooking);
+      setBookingData(updatedBooking);
+
       setSuccessMessage('Thông tin hành khách đã được lưu thành công!');
 
       // Redirect to checkout confirmation page

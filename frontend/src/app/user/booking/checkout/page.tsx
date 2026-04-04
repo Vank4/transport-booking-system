@@ -38,12 +38,11 @@ function CheckoutContent() {
     if (storeData) {
       setBooking(storeData);
       setLoading(false);
-      return;
     }
 
     (async () => {
       try {
-        if (!cancelled) setLoading(true);
+        if (!cancelled && !storeData) setLoading(true);
         const data = await getBookingDetails(bookingId);
         if (!cancelled) {
           setBooking(data);
