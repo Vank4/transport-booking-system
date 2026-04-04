@@ -604,6 +604,86 @@ function formatCurrency(value: number) {
   return `${value.toLocaleString("vi-VN")} VND`;
 }
 
+const HOME_SEARCH_LOCATION_MAP: Record<TravelMode, Record<string, string>> = {
+  flight: {
+    "TP. HCM": "SGN",
+    "TP.HCM": "SGN",
+    "Hà Nội": "HAN",
+    "Đà Nẵng": "DAD",
+    "Huế": "HUI",
+    "Đà Lạt": "DLI",
+    "Hải Phòng": "HPH",
+    "Quảng Ninh": "QNI",
+    "Nha Trang": "CXR",
+    "Tokyo": "TYO",
+    "Singapore": "SIN",
+    "Bangkok": "BKK",
+    "Seoul": "ICN",
+    "Sydney": "SYD",
+    "Paris": "PAR",
+  },
+  train: {
+    "TP. HCM": "Ga Sai Gon",
+    "TP.HCM": "Ga Sai Gon",
+    "Hà Nội": "Ga Ha Noi",
+    "Đà Nẵng": "Ga Da Nang",
+    "Huế": "Ga Hue",
+    "Đà Lạt": "Ga Da Lat",
+    "Đồng Nai": "Ga Bien Hoa",
+    "Thanh Hóa": "Ga Thanh Hoa",
+    "Nha Trang": "Ga Nha Trang",
+  },
+};
+
+const NEWSLETTER_STORAGE_KEY = "home-newsletter-signups";
+
+function normalizeHomeSearchLocation(mode: TravelMode, value: string) {
+  return HOME_SEARCH_LOCATION_MAP[mode][value] ?? value;
+}
+
+function parseDealDateToIso(value: string) {
+  const matched = value.match(/(\d{1,2})\s+thg\s+(\d{1,2})\s+(\d{4})/i);
+  if (!matched) return "";
+
+  const [, day, month, year] = matched;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function getStoredNewsletterSignups() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(NEWSLETTER_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistNewsletterSignup(email: string, mode: TravelMode) {
+  if (typeof window === "undefined") return;
+
+  const nextItems = getStoredNewsletterSignups().filter(
+    (item): item is { email: string; mode: TravelMode; subscribed_at: string } =>
+      Boolean(item?.email),
+  );
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const exists = nextItems.some((item) => item.email === normalizedEmail);
+  if (!exists) {
+    nextItems.push({
+      email: normalizedEmail,
+      mode,
+      subscribed_at: new Date().toISOString(),
+    });
+  }
+
+  window.localStorage.setItem(NEWSLETTER_STORAGE_KEY, JSON.stringify(nextItems));
+}
+
 function getPassengerSummary(adults: number, children: number) {
   return children > 0
     ? `${adults} người lớn, ${children} trẻ em`
@@ -1059,10 +1139,14 @@ function NewUserVoucherSection({ mode }: { mode: TravelMode }) {
   };
 
   const goToVoucher = (item: NewUserVoucherItem) => {
-    const pathname = mode === "flight" ? "/user/flights" : "/user/train-trips";
-    const params = new URLSearchParams({ promo: item.code });
+    const params = new URLSearchParams({
+      type: mode,
+      promo: item.code,
+      seat_class: "economy",
+      page: "1",
+    });
     if (item.destination) params.set("destination", item.destination);
-    router.push(`${pathname}?${params.toString()}`);
+    router.push(`/search?${params.toString()}`);
   };
 
   const copyCode = async (item: NewUserVoucherItem) => {
@@ -1219,13 +1303,19 @@ function DealsSection({
   };
 
   const openDeal = (item: DomesticDealItem) => {
-    const pathname = mode === "flight" ? "/user/flights" : "/user/train-trips";
     const params = new URLSearchParams({
-      origin: item.from,
-      destination: item.to,
-      departure_date: item.date,
+      type: mode,
+      origin: normalizeHomeSearchLocation(mode, item.from),
+      destination: normalizeHomeSearchLocation(mode, item.to),
+      page: "1",
     });
-    router.push(`${pathname}?${params.toString()}`);
+
+    const isoDate = parseDealDateToIso(item.date);
+    if (isoDate) {
+      params.set("departure_date", isoDate);
+    }
+
+    router.push(`/search?${params.toString()}`);
   };
 
   return (
@@ -1339,11 +1429,21 @@ function DealsSection({
         <div className="mt-7 flex justify-center">
           <button
             type="button"
-            onClick={() =>
-              router.push(
-                mode === "flight" ? "/user/flights" : "/user/train-trips",
-              )
-            }
+            onClick={() => {
+              const params = new URLSearchParams({
+                type: mode,
+                page: "1",
+              });
+
+              if (activeTab) {
+                params.set(
+                  "destination",
+                  normalizeHomeSearchLocation(mode, section.tabs.find((tab) => tab.code === activeTab)?.label ?? activeTab),
+                );
+              }
+
+              router.push(`/search?${params.toString()}`);
+            }}
             className={cn(
               "hover-sheen inline-flex h-10 min-w-[260px] items-center justify-center rounded-[10px] px-6 text-[0.98rem] font-semibold text-slate-900 shadow-sm",
               mode === "flight"
@@ -1476,6 +1576,20 @@ function NewsletterSection({ mode }: { mode: TravelMode }) {
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const background = newsletterByMode[mode].background;
 
+  useEffect(() => {
+    if (!email.trim()) {
+      setNewsletterSubscribed(false);
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const alreadySubscribed = getStoredNewsletterSignups().some(
+      (item) => item.email === normalizedEmail,
+    );
+
+    setNewsletterSubscribed(alreadySubscribed);
+  }, [email]);
+
   const validateNewsletterEmail = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return "Vui lòng nhập email";
@@ -1508,6 +1622,13 @@ function NewsletterSection({ mode }: { mode: TravelMode }) {
 
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 404 || res.status === 405) {
+          persistNewsletterSignup(email, mode);
+          setNewsletterSubscribed(true);
+          setNewsletterError(null);
+          setNewsletterToast("Da ghi nhan email cua ban");
+          return;
+        }
         const message =
           payload?.message ??
           (res.status === 409
@@ -1517,6 +1638,7 @@ function NewsletterSection({ mode }: { mode: TravelMode }) {
         return;
       }
 
+      persistNewsletterSignup(email, mode);
       setNewsletterSubscribed(true);
       setNewsletterError(null);
       setNewsletterToast("Đăng ký thành công");

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { CircleHelp, Gift, Home, LogIn, LogOut, Search, Ticket, User, X } from "lucide-react";
+import { CircleHelp, Home, LogIn, LogOut, Search, Ticket, User, X } from "lucide-react";
 import { buildLoginRedirect, clearAuthSession, isAuthenticated } from "@/lib/auth";
 
 type AppSidebarProps = {
@@ -22,7 +22,6 @@ type NavItem = {
 const publicNavItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/search", label: "Search", icon: Search },
-  { href: "/voucher", label: "Voucher", icon: Gift },
   { href: "/help", label: "Help", icon: CircleHelp },
 ];
 
