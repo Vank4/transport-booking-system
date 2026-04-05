@@ -230,31 +230,35 @@ export default function AdminUsersPage() {
 
       {/* ─── BATCH ACTION BAR ────────────────────────────── */}
       {someSelected && (
-        <div className="sticky top-16 z-30 flex items-center justify-between gap-4 bg-orange-500 text-white px-5 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-2">
+        <div className="sticky top-16 z-30 flex flex-col sm:flex-row items-center justify-between gap-4 bg-orange-500 text-white px-4 py-3 rounded-xl shadow-lg animate-in slide-in-from-top-2">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px]">check_circle</span>
-            <span className="text-sm font-bold">{selectedIds.size} người dùng đã chọn</span>
+            <span className="text-sm font-bold truncate">{selectedIds.size} người dùng đã chọn</span>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => handleBatchRole('ADMIN')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-              <span className="material-symbols-outlined text-[16px]">shield_person</span>
-              Đổi → Admin
-            </button>
-            <button onClick={() => handleBatchRole('USER')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-              <span className="material-symbols-outlined text-[16px]">person</span>
-              Đổi → User
-            </button>
-            <div className="w-px h-6 bg-white/30"></div>
-            <button onClick={() => handleBatchStatus('BLOCKED')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-              <span className="material-symbols-outlined text-[16px]">block</span>
-              Khóa tài khoản
-            </button>
-            <button onClick={() => handleBatchStatus('ACTIVE')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-              <span className="material-symbols-outlined text-[16px]">lock_open</span>
-              Mở khóa
-            </button>
-            <div className="w-px h-6 bg-white/30"></div>
-            <button onClick={() => setSelectedIds(new Set())} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-semibold transition-colors">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2">
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleBatchRole('ADMIN')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors disabled:opacity-50">
+                <span className="material-symbols-outlined text-[16px]">shield_person</span>
+                <span className="hidden xs:inline">Đổi →</span> Admin
+              </button>
+              <button onClick={() => handleBatchRole('USER')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors disabled:opacity-50">
+                <span className="material-symbols-outlined text-[16px]">person</span>
+                <span className="hidden xs:inline">Đổi →</span> User
+              </button>
+            </div>
+            <div className="hidden sm:block w-px h-6 bg-white/30"></div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleBatchStatus('BLOCKED')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors disabled:opacity-50">
+                <span className="material-symbols-outlined text-[16px]">block</span>
+                Khóa
+              </button>
+              <button onClick={() => handleBatchStatus('ACTIVE')} disabled={isBatchLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors disabled:opacity-50">
+                <span className="material-symbols-outlined text-[16px]">lock_open</span>
+                Mở khóa
+              </button>
+            </div>
+            <div className="hidden sm:block w-px h-6 bg-white/30"></div>
+            <button onClick={() => setSelectedIds(new Set())} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">
               <span className="material-symbols-outlined text-[16px]">close</span>
               Bỏ chọn
             </button>

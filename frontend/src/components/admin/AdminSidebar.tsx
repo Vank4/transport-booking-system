@@ -13,7 +13,13 @@ interface NavItem {
   children?: NavItem[];
 }
 
-export default function AdminSidebar() {
+export default function AdminSidebar({ 
+  isMobileOpen, 
+  onClose 
+}: { 
+  isMobileOpen?: boolean; 
+  onClose?: () => void;
+}) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -82,19 +88,41 @@ export default function AdminSidebar() {
   };
 
   return (
-    <aside className={`sticky top-0 h-screen flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-300 ${isCollapsed ? "w-20" : "w-64"}`}>
-      {/* Brand Header */}
-      <div className={`shrink-0 flex items-center ${isCollapsed ? 'justify-center' : 'gap-3 px-6'} py-6 transition-all border-b border-slate-100 dark:border-slate-800`}>
-        <div className="bg-orange-500 rounded-lg h-9 w-9 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
-          <span className="material-symbols-outlined font-bold">travel</span>
+    <>
+      {/* Mobile Backdrop */}
+      <div 
+        className={`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 ${isMobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} 
+        onClick={onClose}
+      />
+
+      <aside className={`fixed inset-y-0 left-0 lg:sticky lg:top-0 h-screen flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-300 z-50 ${isCollapsed ? "w-20" : "w-64"} ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        {/* Brand Header */}
+        <div className={`shrink-0 flex items-center ${isCollapsed ? 'justify-center' : 'gap-3 px-6'} py-6 transition-all border-b border-slate-100 dark:border-slate-800 relative`}>
+          {!isCollapsed && (
+            <div className="flex items-center gap-3">
+              <div className="bg-orange-500 rounded-lg h-9 w-9 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
+                <span className="material-symbols-outlined font-bold">travel</span>
+              </div>
+              <div className="flex flex-col whitespace-nowrap overflow-hidden">
+                <h1 className="text-slate-900 dark:text-white text-base font-black leading-tight tracking-tight">TravelAdmin</h1>
+                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">Booking System</p>
+              </div>
+            </div>
+          )}
+          {isCollapsed && (
+            <div className="bg-orange-500 rounded-lg h-9 w-9 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
+              <span className="material-symbols-outlined font-bold">travel</span>
+            </div>
+          )}
+
+          {/* Mobile Close Button */}
+          <button 
+            onClick={onClose}
+            className="lg:hidden absolute right-4 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[24px]">close</span>
+          </button>
         </div>
-        {!isCollapsed && (
-          <div className="flex flex-col whitespace-nowrap overflow-hidden">
-            <h1 className="text-slate-900 dark:text-white text-base font-black leading-tight tracking-tight">TravelAdmin</h1>
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">Booking System</p>
-          </div>
-        )}
-      </div>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin px-3 py-4">
         <nav className="flex flex-col gap-1">
@@ -139,11 +167,12 @@ export default function AdminSidebar() {
       </div>
 
       <div className="mt-auto border-t border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-900 z-10 flex flex-col gap-4">
-        <button onClick={() => setIsCollapsed(!isCollapsed)} className={`flex items-center justify-center p-2 text-slate-400 hover:text-orange-500 transition-colors rounded-xl bg-slate-50 dark:bg-slate-800 ${isCollapsed ? 'w-12 h-12' : 'w-full gap-2'}`}>
+        <button onClick={() => setIsCollapsed(!isCollapsed)} className={`hidden lg:flex items-center justify-center p-2 text-slate-400 hover:text-orange-500 transition-colors rounded-xl bg-slate-50 dark:bg-slate-800 ${isCollapsed ? 'w-12 h-12' : 'w-full gap-2'}`}>
           <span className="material-symbols-outlined text-xl">{isCollapsed ? "dock_to_right" : "dock_to_left"}</span>
           {!isCollapsed && <span className="text-xs font-bold uppercase tracking-widest">Thu gọn</span>}
         </button>
       </div>
     </aside>
+    </>
   );
 }

@@ -23,7 +23,7 @@ const pageTitles: Record<string, string> = {
   "/admin/settings": "Cài đặt",
 };
 
-export default function AdminHeader() {
+export default function AdminHeader({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -51,12 +51,21 @@ export default function AdminHeader() {
     .find(([path]) => pathname.startsWith(path))?.[1] ?? "Quản trị hệ thống";
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 px-6 backdrop-blur-sm">
-      {/* Breadcrumb-style title */}
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-slate-400 font-medium">Admin</span>
-        <span className="text-slate-300 dark:text-slate-600">/</span>
-        <span className="font-bold text-slate-900 dark:text-white">{pageTitle}</span>
+    <header className="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 px-4 md:px-6 backdrop-blur-sm">
+      {/* Mobile Menu Toggle & Breadcrumb */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden flex items-center justify-center p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          <span className="material-symbols-outlined">menu</span>
+        </button>
+
+        <div className="flex items-center gap-2 text-sm">
+          <span className="hidden sm:inline text-slate-400 font-medium">Admin</span>
+          <span className="hidden sm:inline text-slate-300 dark:text-slate-600">/</span>
+          <span className="font-bold text-slate-900 dark:text-white">{pageTitle}</span>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

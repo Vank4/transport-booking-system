@@ -154,7 +154,7 @@ export default function AdminAirportsPage() {
                       </div>
                     </td>
                     <td className="py-5 px-6">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-end gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <Link href={`/admin/airports/${airport._id}`} className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-orange-500 transition-all shadow-sm">
                           <span className="material-symbols-outlined text-[18px]">edit</span>
                         </Link>
