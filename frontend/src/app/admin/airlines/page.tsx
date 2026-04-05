@@ -163,7 +163,7 @@ export default function AdminAirlinesPage() {
                       <span className="text-slate-500 text-sm font-medium">{new Date(airline.created_at).toLocaleDateString('vi-VN')}</span>
                     </td>
                     <td className="py-5 px-6">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-end gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <Link href={`/admin/airlines/${airline._id}`} className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400 hover:text-orange-500 hover:border-orange-200 transition-all shadow-sm">
                           <span className="material-symbols-outlined text-[20px]">edit</span>
                         </Link>

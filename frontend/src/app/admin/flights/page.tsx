@@ -235,7 +235,7 @@ export default function AdminFlightsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">{getStatusBadge(f.status)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <Link href={`/admin/flights/${f._id}`} className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-500/10 rounded transition-colors" title="Chỉnh sửa">
                           <span className="material-symbols-outlined text-lg">edit</span>
                         </Link>
