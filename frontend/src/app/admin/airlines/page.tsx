@@ -1,6 +1,7 @@
 "use client";
 import Link from 'next/link';
 import { useEffect, useState, useCallback } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/api';
 import { useToast } from "@/components/admin/ToastProvider";
 import config from '@/config';
@@ -22,16 +23,20 @@ export default function AdminAirlinesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(q, 500);
   const [page, setPage] = useState(1);
   const limit = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const fetchAirlines = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await api.get('/airlines', {
         params: {
-          q: searchQuery || null,
+          q: debouncedSearch || null,
           page,
           limit
         }
@@ -43,7 +48,7 @@ export default function AdminAirlinesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, page]);
+  }, [debouncedSearch, page]);
 
   useEffect(() => {
     fetchAirlines();
@@ -51,7 +56,7 @@ export default function AdminAirlinesPage() {
 
   const commitSearch = () => {
     setPage(1);
-    setSearchQuery(q);
+
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -94,13 +99,13 @@ export default function AdminAirlinesPage() {
       <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-          <input 
-            type="text" 
-            placeholder="Tìm theo tên hãng hoặc mã IATA..." 
-            value={q} 
+          <input
+            type="text"
+            placeholder="Tìm theo tên hãng hoặc mã IATA..."
+            value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={handleKeyDown}
-            className={inputCls} 
+            className={inputCls}
           />
         </div>
         <button onClick={commitSearch} className="h-11 px-6 bg-slate-900 dark:bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-800 dark:hover:bg-slate-700 transition-all flex items-center gap-2 shrink-0">
@@ -185,16 +190,16 @@ export default function AdminAirlinesPage() {
             Hiển thị <span className="text-slate-900 dark:text-white">{(pagination.page - 1) * pagination.limit + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)}</span> của <span className="text-slate-900 dark:text-white">{pagination.total}</span> hãng bay
           </p>
           <div className="flex gap-2">
-            <button 
-              disabled={page <= 1} 
+            <button
+              disabled={page <= 1}
               onClick={() => setPage(page - 1)}
               className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold disabled:opacity-50 hover:bg-slate-50 transition-all"
             >
               Trước
             </button>
             <div className="flex items-center px-4 font-black text-sm text-orange-500">{page} / {pagination.totalPages}</div>
-            <button 
-              disabled={page >= pagination.totalPages} 
+            <button
+              disabled={page >= pagination.totalPages}
               onClick={() => setPage(page + 1)}
               className="px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold disabled:opacity-50 hover:bg-slate-50 transition-all"
             >

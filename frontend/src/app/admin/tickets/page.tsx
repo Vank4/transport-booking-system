@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState, useCallback } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/api';
 import { useToast } from '@/components/admin/ToastProvider';
 
@@ -23,16 +24,20 @@ export default function AdminTicketsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
-  const [searchString, setSearchString] = useState("");
+  const debouncedSearch = useDebounce(q, 500);
   const [page, setPage] = useState(1);
   const limit = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const fetchTickets = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await api.get('/tickets', {
         params: {
-          q: searchString || null,
+          q: debouncedSearch || null,
           page,
           limit
         }
@@ -44,7 +49,7 @@ export default function AdminTicketsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchString, page, limit]);
+  }, [debouncedSearch, page, limit]);
 
   useEffect(() => {
     fetchTickets();
@@ -53,7 +58,7 @@ export default function AdminTicketsPage() {
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       setPage(1);
-      setSearchString(q);
+
     }
   };
 
@@ -96,7 +101,6 @@ export default function AdminTicketsPage() {
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={handleSearch}
           />
         </div>
       </div>
@@ -140,8 +144,8 @@ export default function AdminTicketsPage() {
                           {ticket.passenger_name}
                         </span>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                           <span className="text-xs text-slate-500">{ticket.passenger_id_card || 'Không có ID'}</span>
-                           <span className="text-[10px] bg-slate-200 text-slate-600 px-1 rounded uppercase font-bold">{ticket.passenger_type}</span>
+                          <span className="text-xs text-slate-500">{ticket.passenger_id_card || 'Không có ID'}</span>
+                          <span className="text-[10px] bg-slate-200 text-slate-600 px-1 rounded uppercase font-bold">{ticket.passenger_type}</span>
                         </div>
                       </div>
                     </td>
@@ -186,8 +190,8 @@ export default function AdminTicketsPage() {
             </tbody>
           </table>
         </div>
-        
-        {/* Pagination */ }
+
+        {/* Pagination */}
         <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 px-4 py-3 sm:px-6 mt-auto">
           <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
             <div>

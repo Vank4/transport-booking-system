@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const adminBookingsController = require("../controllers/adminBookings.controller");
-// const authMiddleware = require("../middleware/authMiddleware");
-// const roleMiddleware = require("../middleware/roleMiddleware");
+const authMiddleware = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/role.middleware");
 
+router.use(authMiddleware, authorizeRoles("ADMIN"));
 // Temporary un-protected routes for rapid development
 router.get("/", adminBookingsController.getAllBookings);
 router.get("/:id", adminBookingsController.getBookingById);

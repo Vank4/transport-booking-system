@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
 import { useToast } from '@/components/admin/ToastProvider';
+import { useDebounce } from '@/hooks/useDebounce';
 
 interface UserData {
   _id: string;
@@ -28,7 +29,7 @@ export default function AdminUsersPage() {
 
   // Filter States
   const [q, setQ] = useState("");
-  const [searchString, setSearchString] = useState("");
+  const debouncedSearch = useDebounce(q, 500);
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
@@ -58,7 +59,7 @@ export default function AdminUsersPage() {
       setIsLoading(true);
       const res = await api.get('/users', {
         params: {
-          q: searchString || null,
+          q: debouncedSearch || null,
           role: roleFilter !== 'ALL' ? roleFilter : null,
           status: statusFilter !== 'ALL' ? statusFilter : null,
           page,
@@ -72,18 +73,16 @@ export default function AdminUsersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchString, roleFilter, statusFilter, page, limit]);
+  }, [debouncedSearch, roleFilter, statusFilter, page, limit]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      setPage(1);
-      setSearchString(q);
-    }
-  };
+  // Reset page to 1 when search query changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
@@ -188,11 +187,10 @@ export default function AdminUsersPage() {
             </div>
             <input
               className="block w-full rounded-lg border-0 py-2.5 pl-10 pr-4 text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 ring-1 ring-inset ring-slate-200 dark:ring-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-orange-500 sm:text-sm sm:leading-6"
-              placeholder="Nhập tên, email hoặc ID (Nhấn Enter...)"
+              placeholder="Nhập tên, email hoặc ID (Tự động tìm kiếm...)"
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={handleSearch}
             />
           </div>
         </div>

@@ -1,15 +1,16 @@
 "use client";
 import Link from 'next/link';
 import { useEffect, useState, useCallback } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/api';
 import { useToast } from "@/components/admin/ToastProvider";
 import { getLogoUrl } from '@/lib/utils';
 
 interface FlightFareData {
   _id: string;
-  flight_id: { 
-    _id: string; 
-    flight_number: string; 
+  flight_id: {
+    _id: string;
+    flight_number: string;
     airline_id: { name: string, iata_code: string, logo_url: string };
     departure_airport_id: { iata_code: string, city: string };
     arrival_airport_id: { iata_code: string, city: string };
@@ -30,20 +31,24 @@ export default function AdminFlightFaresPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(q, 500);
   const [cabinFilter, setCabinFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const limit = 10;
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const fetchFlightFares = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await api.get('/flight-fares', {
-        params: { 
-          page, 
-          limit, 
-          q: searchQuery || null,
+        params: {
+          page,
+          limit,
+          q: debouncedSearch || null,
           cabin_class: cabinFilter === "ALL" ? null : cabinFilter,
           is_active: statusFilter === "ALL" ? null : (statusFilter === "ACTIVE")
         }
@@ -55,7 +60,7 @@ export default function AdminFlightFaresPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, searchQuery, cabinFilter, statusFilter]);
+  }, [page, limit, debouncedSearch, cabinFilter, statusFilter]);
 
   useEffect(() => {
     fetchFlightFares();
@@ -63,7 +68,6 @@ export default function AdminFlightFaresPage() {
 
   const commitSearch = () => {
     setPage(1);
-    setSearchQuery(q);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -125,19 +129,19 @@ export default function AdminFlightFaresPage() {
               Số hiệu / Hãng
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors">search</span>
-                <input 
-                  type="text" 
-                  placeholder="VJ123, Vietnam Airlines..." 
-                  value={q} 
+                <input
+                  type="text"
+                  placeholder="VJ123, Vietnam Airlines..."
+                  value={q}
                   onChange={(e) => setQ(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className={inputCls} 
+                  className={inputCls}
                 />
               </div>
             </label>
             <label className="flex flex-col gap-1.5 text-slate-900 dark:text-slate-300 text-sm font-semibold">
               Hạng khoang
-              <select 
+              <select
                 value={cabinFilter}
                 onChange={(e) => { setCabinFilter(e.target.value); setPage(1); }}
                 className="w-full py-2.5 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-orange-500 text-sm text-slate-900 dark:text-white hover:border-slate-300 dark:hover:border-slate-600 transition-all outline-none"
@@ -151,7 +155,7 @@ export default function AdminFlightFaresPage() {
             </label>
             <label className="flex flex-col gap-1.5 text-slate-900 dark:text-slate-300 text-sm font-semibold">
               Trạng thái
-              <select 
+              <select
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="w-full py-2.5 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-orange-500 text-sm text-slate-900 dark:text-white hover:border-slate-300 dark:hover:border-slate-600 transition-all outline-none"
@@ -240,13 +244,13 @@ export default function AdminFlightFaresPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                       <div className="flex flex-col items-center gap-1.5">
+                      <div className="flex flex-col items-center gap-1.5">
                         <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white">
                           <span className="material-symbols-outlined text-[16px] text-slate-400">event_seat</span>
                           {fare.available_seats}
                         </div>
-                        {fare.is_active ? 
-                          <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold text-green-600"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Đang bán</span> : 
+                        {fare.is_active ?
+                          <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold text-green-600"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Đang bán</span> :
                           <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold text-slate-400">● Tạm dừng</span>
                         }
                       </div>

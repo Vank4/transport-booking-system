@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/api';
 import { useToast } from '@/components/admin/ToastProvider';
 
@@ -31,9 +32,14 @@ export default function AdminTrainTripsPage() {
   // Committed search state (triggers fetch)
   const [committedDeparture, setCommittedDeparture] = useState("");
   const [committedArrival, setCommittedArrival] = useState("");
-  const [searchQuery, setSearchQuery] = useState(""); // General search (train number/name)
+  const [q, setQ] = useState("");
+  const debouncedSearch = useDebounce(q, 500);
   const [page, setPage] = useState(1);
   const limit = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const fetchTrips = useCallback(async () => {
     try {
@@ -42,7 +48,7 @@ export default function AdminTrainTripsPage() {
         params: {
           departure: committedDeparture || null,
           arrival: committedArrival || null,
-          q: searchQuery || null,
+          q: debouncedSearch || null,
           date: dateFilter || null,
           status: statusFilter !== 'ALL' ? statusFilter : null,
           page, limit
@@ -55,7 +61,7 @@ export default function AdminTrainTripsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [committedDeparture, committedArrival, searchQuery, dateFilter, statusFilter, page, limit]);
+  }, [committedDeparture, committedArrival, debouncedSearch, dateFilter, statusFilter, page, limit]);
 
   const isInitialMount = useRef(true);
 
@@ -107,9 +113,9 @@ export default function AdminTrainTripsPage() {
   const getStatusBadge = (status: string) => {
     const map: Record<string, { label: string; cls: string }> = {
       SCHEDULED: { label: "Đã lên lịch", cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" },
-      DELAYED:   { label: "Bị hoãn",     cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
-      CANCELLED: { label: "Đã hủy",      cls: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
-      COMPLETED: { label: "Hoàn thành",   cls: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
+      DELAYED: { label: "Bị hoãn", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
+      CANCELLED: { label: "Đã hủy", cls: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
+      COMPLETED: { label: "Hoàn thành", cls: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
     };
     const s = map[status] || { label: status, cls: "bg-slate-100 text-slate-600" };
     return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>{s.label}</span>;

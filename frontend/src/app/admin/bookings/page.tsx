@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/api';
 import { useToast } from '@/components/admin/ToastProvider';
 
@@ -29,7 +30,7 @@ export default function AdminBookingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
-  const [searchString, setSearchString] = useState("");
+  const debouncedSearch = useDebounce(q, 500);
   const [statusFilter, setStatusFilter] = useState(""); // "" = ALL
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -39,12 +40,16 @@ export default function AdminBookingsPage() {
   const [drawerData, setDrawerData] = useState<any>(null);
   const [isDrawerLoading, setIsDrawerLoading] = useState(false);
 
+    useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const fetchBookings = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await api.get('/admin/bookings', {
         params: {
-          q: searchString || null,
+          q: debouncedSearch || null,
           status: statusFilter || null,
           page,
           limit
@@ -57,7 +62,7 @@ export default function AdminBookingsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchString, statusFilter, page, limit]);
+  }, [debouncedSearch, statusFilter, page, limit]);
 
   const fetchStats = async () => {
     try {
@@ -221,7 +226,6 @@ export default function AdminBookingsPage() {
                placeholder="Tìm theo mã Booking..."
                value={q}
                onChange={(e) => setQ(e.target.value)}
-               onKeyDown={handleSearch}
              />
           </div>
         </div>

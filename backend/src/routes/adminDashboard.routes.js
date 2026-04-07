@@ -6,12 +6,14 @@ const Payment = require("../models/payments.model");
 const Flight = require("../models/flights.model");
 const TrainTrip = require("../models/trainTrips.model");
 const Voucher = require("../models/vouchers.model");
+const authMiddleware = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/role.middleware");
 
 /**
  * GET /api/admin/dashboard
  * Trả về thống kê tổng hợp cho trang tổng quan admin.
  */
-router.get("/", async (req, res) => {
+router.get("/", authMiddleware, authorizeRoles("ADMIN"), async (req, res) => {
   try {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -168,7 +170,7 @@ router.get("/", async (req, res) => {
  * GET /api/admin/dashboard/reports
  * Trả về báo cáo chuyên sâu theo năm.
  */
-router.get("/reports", async (req, res) => {
+router.get("/reports", authMiddleware, authorizeRoles("ADMIN"), async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
     const startDate = new Date(year, 0, 1);

@@ -1,7 +1,10 @@
-// const { authenticate } = require("../middleware/auth.middleware");
-// const { authorizeRoles } = require("../middleware/role.middleware");
+const authMiddleware = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/role.middleware");
 const express = require("express");
 const router = express.Router();
+
+router.use(authMiddleware, authorizeRoles("ADMIN"));
+
 const userController = require("../controllers/users.controller");
 const { validate } = require("../middleware/validate.middleware");
 const { updateUserSchema, getUsersSchema } = require("../validators/user.validator");
