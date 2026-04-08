@@ -83,11 +83,11 @@ async function loginUser({ email, password }) {
     throw new AuthServiceError("Invalid password.", 400);
   }
 
-  const accessToken = jwt.sign({ userId: user._id }, env.jwtSecret, {
+  const accessToken = jwt.sign({ userId: user._id, role: user.role }, env.jwtSecret, {
     expiresIn: "1h",
   });
 
-  const refreshToken = jwt.sign({ userId: user._id }, env.jwtRefreshSecret, {
+  const refreshToken = jwt.sign({ userId: user._id, role: user.role }, env.jwtRefreshSecret, {
     expiresIn: "7d",
   });
 
@@ -109,7 +109,10 @@ async function refreshToken({ refreshToken }) {
   try {
     const decoded = jwt.verify(refreshToken, env.jwtRefreshSecret);
 
-    const accessToken = jwt.sign({ userId: decoded.userId }, env.jwtSecret, {
+    const user = await User.findById(decoded.userId);
+    if (!user) throw new AuthServiceError("User not found.", 404);
+
+    const accessToken = jwt.sign({ userId: user._id, role: user.role }, env.jwtSecret, {
       expiresIn: "1h",
     });
 

@@ -1,6 +1,7 @@
 "use client";
 import Link from 'next/link';
 import { useEffect, useState, useCallback } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/lib/api';
 import { useToast } from "@/components/admin/ToastProvider";
 
@@ -21,16 +22,20 @@ export default function AdminAirportsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(q, 500);
   const [page, setPage] = useState(1);
   const limit = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const fetchAirports = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await api.get('/airports', {
         params: {
-          q: searchQuery || null,
+          q: debouncedSearch || null,
           page,
           limit
         }
@@ -42,7 +47,7 @@ export default function AdminAirportsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, page]);
+  }, [debouncedSearch, page]);
 
   useEffect(() => {
     fetchAirports();
@@ -50,7 +55,7 @@ export default function AdminAirportsPage() {
 
   const commitSearch = () => {
     setPage(1);
-    setSearchQuery(q);
+
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
